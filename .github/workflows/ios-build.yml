@@ -1,0 +1,53 @@
+name: "Build Unsigned iOS IPA"
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Generate iOS Folder (Prebuild)
+        # This creates the ios folder that was missing on Windows
+        run: npx expo prebuild --platform ios --no-install
+
+      - name: Install Pods
+        run: |
+          cd ios
+          pod install
+
+      - name: Build Unsigned Archive
+        run: |
+          xcodebuild archive \
+            -workspace ios/*.xcworkspace \
+            -scheme $(ls ios | grep .xcworkspace | cut -f 1 -d '.') \
+            -configuration Release \
+            -archivePath build/ProjectLighthouse.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Package into IPA
+        run: |
+          mkdir -p build/Payload
+          cp -r build/ProjectLighthouse.xcarchive/Products/Applications/*.app build/Payload/
+          cd build
+          zip -r ProjectLighthouse.ipa Payload
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ProjectLighthouse-IPA
+          path: build/ProjectLighthouse.ipa
