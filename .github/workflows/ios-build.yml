@@ -30,15 +30,20 @@ jobs:
           pod install
 
       - name: Build Unsigned Archive
-        run: |
+       run: |
+          # This line automatically finds the correct project name
+          SCHEME_NAME=$(ls ios | grep .xcworkspace | cut -f 1 -d '.')
+          
           xcodebuild archive \
-            -workspace ios/*.xcworkspace \
-            -scheme $(ls ios | grep .xcworkspace | cut -f 1 -d '.') \
+            -workspace ios/$SCHEME_NAME.xcworkspace \
+            -scheme $SCHEME_NAME \
             -configuration Release \
             -archivePath build/ProjectLighthouse.xcarchive \
+            -sdk iphoneos \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY=""
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES
 
       - name: Package into IPA
         run: |
