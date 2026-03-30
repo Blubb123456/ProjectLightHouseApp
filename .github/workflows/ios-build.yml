@@ -20,8 +20,9 @@ jobs:
         run: npm install
 
       - name: Generate iOS Folder (Prebuild)
-        # This creates the ios folder that was missing on Windows
-        run: npx expo prebuild --platform ios --no-install
+        run: |
+          rm -rf ios
+          yes | npx expo prebuild --platform ios --no-install --non-interactive
 
       - name: Install Pods
         run: |
