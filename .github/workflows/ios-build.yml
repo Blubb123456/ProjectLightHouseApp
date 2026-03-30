@@ -31,19 +31,23 @@ jobs:
 
       - name: Build Unsigned Archive
         run: |
-          # This line automatically finds the correct project name
-          SCHEME_NAME=$(ls ios | grep .xcworkspace | cut -f 1 -d '.')
+          # Automatically find the project name even with spaces
+          WORKSPACE_PATH=$(ls ios/*.xcworkspace | head -1)
+          SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
+          
+          echo "Building Scheme: $SCHEME_NAME"
           
           xcodebuild archive \
-            -workspace ios/$SCHEME_NAME.xcworkspace \
-            -scheme $SCHEME_NAME \
+            -workspace "$WORKSPACE_PATH" \
+            -scheme "$SCHEME_NAME" \
             -configuration Release \
             -archivePath build/ProjectLighthouse.xcarchive \
             -sdk iphoneos \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            AD_HOC_CODE_SIGNING_ALLOWED=YES
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            COMPILER_INDEX_STORE_ENABLE=NO
 
       - name: Package into IPA
         run: |
