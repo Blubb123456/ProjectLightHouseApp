@@ -10,7 +10,7 @@
     "web": "expo start --web"
   },
   "ios": {
-    "bundleIdentifier": "com.justinbublitz.projectlighthouse",
+    "bundleIdentifier": "com.jmb10.projectlighthouse",
     "supportsTablet": true
   },
   "dependencies": {
