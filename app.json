@@ -18,7 +18,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.justinbublitz.ProjectLightHouseReactApp",
+      "bundleIdentifier": "com.jmb10.ProjectLightHouseReactApp",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
