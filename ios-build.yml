@@ -18,6 +18,10 @@ jobs:
       - name: Install dependencies
         run: yarn install
 
+# ADD THIS STEP HERE
+      - name: Run Expo Prebuild
+        run: npx expo prebuild --platform ios --no-install
+        
       - name: Install Pods
         run: |
           cd ios
