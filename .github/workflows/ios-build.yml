@@ -30,7 +30,7 @@ jobs:
           pod install
 
       - name: Build Unsigned Archive
-       run: |
+        run: |
           # This line automatically finds the correct project name
           SCHEME_NAME=$(ls ios | grep .xcworkspace | cut -f 1 -d '.')
           
