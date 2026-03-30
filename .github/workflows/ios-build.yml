@@ -31,9 +31,10 @@ jobs:
           pod install
 
       - name: Build Unsigned Archive
+        env:
+          ENTRY_FILE: App.js # Tell it to use App.js instead of index.js
         run: |
-         # Find the workspace
-          WORKSPACE_PATH=$(find ios -name "*.xcworkspace" | head -1)
+         WORKSPACE_PATH=$(find ios -name "*.xcworkspace" | head -1)
           SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
           
           xcodebuild archive \
@@ -42,7 +43,6 @@ jobs:
             -configuration Release \
             -archivePath build/ProjectLighthouse.xcarchive \
             -sdk iphoneos \
-            -allowProvisioningUpdates \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
