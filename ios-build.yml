@@ -21,10 +21,12 @@ jobs:
 
       - name: Generate iOS Folder (Prebuild)
         # This creates the ios folder that was missing on Windows
-        run: yes | npx expo prebuild --platform ios --no-install
+        run: yes | npx expo prebuild --platform ios --clean --no-install
 
-        name: Check if ios folder exists
-        run: ls -R | grep ios:
+      name: Debug Folder Structure
+        run: |
+          ls -a
+          if [ -d "ios" ]; then echo "IOS FOLDER FOUND"; else echo "IOS FOLDER MISSING"; fi
 
       - name: Install Pods
         run: |
