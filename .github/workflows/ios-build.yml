@@ -1,11 +1,11 @@
 name: "Build Unsigned iOS IPA"
 
 on:
-  workflow_dispatch: # Allows you to run it manually from the Actions tab
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-15 # Uses the latest macOS runner available in 2026
+    runs-on: macos-15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -14,9 +14,19 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
 
       - name: Install dependencies
-        run: yarn install
+        run: npm install
+
+      - name: Generate iOS Folder (Prebuild)
+        # This creates the ios folder that was missing on Windows
+        run: yes | npx expo prebuild --platform ios --clean --no-install
+
+      name: Debug Folder Structure
+        run: |
+          ls -a
+          if [ -d "ios" ]; then echo "IOS FOLDER FOUND"; else echo "IOS FOLDER MISSING"; fi
 
       - name: Install Pods
         run: |
@@ -27,9 +37,9 @@ jobs:
         run: |
           xcodebuild archive \
             -workspace ios/*.xcworkspace \
-            -scheme ProjectLightHouseReactApp \
+            -scheme $(ls ios | grep .xcworkspace | cut -f 1 -d '.') \
             -configuration Release \
-            -archivePath build/UnsignedApp.xcarchive \
+            -archivePath build/ProjectLighthouse.xcarchive \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""
@@ -37,12 +47,12 @@ jobs:
       - name: Package into IPA
         run: |
           mkdir -p build/Payload
-          cp -r build/UnsignedApp.xcarchive/Products/Applications/*.app build/Payload/
+          cp -r build/ProjectLighthouse.xcarchive/Products/Applications/*.app build/Payload/
           cd build
-          zip -r YourAppName.ipa Payload
+          zip -r ProjectLighthouse.ipa Payload
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ios-ipa
-          path: build/YourAppName.ipa
+          name: ProjectLighthouse-IPA
+          path: build/ProjectLighthouse.ipa
