@@ -20,7 +20,7 @@
       "supportsTablet": true,
     "bundleIdentifier": "com.jmb10.ProjectLightHouseReactApp",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
         "NSCameraUsageDescription": "This app needs camera access to classify images for Project Lighthouse."
       }
     },
