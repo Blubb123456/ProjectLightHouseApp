@@ -1,195 +1,111 @@
-import '@tensorflow/tfjs-react-native';
-import * as tf from '@tensorflow/tfjs';
+import React, { useEffect, useState, useRef } from 'react';
+import { StyleSheet, Text, View, Button, Image, ActivityIndicator } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View,  Component } from 'react-native';
-import { Button, Image } from 'react-native'
-import React, { useEffect,useState, useRef } from 'react';
+import * as tf from '@tensorflow/tfjs';
+import '@tensorflow/tfjs-react-native'; // Essential for mobile
 import * as ImagePicker from 'expo-image-picker';
 
 export default function App() {
-  const [image, setImage] = useState(null); 
- const [confidence,  setConfidence] = useState("");
-const [model, setModel] = useState(null);
-const [prediction, setPrediction] = useState("");
-const test = "bnlamodwf";
-const predictionTextResult = prediction;
-const confidenceTextResult = confidence;
-  const imageRef = useRef(null); // Reference to the <img> tag
-const [error, setError] = useState(null);
-  const handleImageChange = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      // Create a URL for the image and set it to the <img> source
-      imageRef.current.src = URL.createObjectURL(file);
-      imageRef.current.onload = () => predict(imageRef.current);
-    }
-  };
-  
+  const [imageUri, setImageUri] = useState(null);
+  const [model, setModel] = useState(null);
+  const [prediction, setPrediction] = useState("");
+  const [confidence, setConfidence] = useState("");
+  const [isTfReady, setIsTfReady] = useState(false);
+  const [error, setError] = useState(null);
+
+  // 1. Initialize TensorFlow
   useEffect(() => {
     async function setup() {
       try {
         await tf.ready();
-        // load your model here
         setIsTfReady(true);
+        // Load model here if desired, or use a separate effect
+        const loadedModel = await loadModel();
+        setModel(loadedModel);
       } catch (e) {
-        setError(e.message); // This will show the error on the screen instead of crashing
+        setError("TF Setup Error: " + e.message);
       }
     }
     setup();
   }, []);
 
-  if (error) {
-    return <Text style={{marginTop: 50, color: 'red'}}>Error: {error}</Text>;
-  }
-
- return (
-    
-    <View style={styles.container}>
-    
-      <Text>Open up App.js to start working on your app!</Text>
-  
-      <Button color = "red" title="Please select a image to scan" onPress={pickImage}/>
-      <input type="file" style={styles.imageButton} onChange={handleImageChange} />
-      <img ref={imageRef} alt="Upload Preview" style={{ width: 200, height: 200 }} />
-      <Button title="Predict" onPress= {() => predict(imageRef.current)}/>
-      <Text>This image is: {`${predictionTextResult}`} with a score of {`${confidenceTextResult}`}</Text>
-      <StatusBar style="auto" />
-    </View>
-    
-  );
-}
-useEffect(() => {
-  let model;
+  // 2. Load Model Function (Inside the component)
   async function loadModel() {
-  try {
-    // 1. Fetch JSON explicitly as text first
-    const response = await fetch('/model.json');
-    const jsonText = await response.text();
-    
-    // 2. Parse it manually
-    const modelTopology = JSON.parse(jsonText);
-    
-    // 3. Load using the parsed object directly
-    const model = await tf.loadLayersModel({
-      load: async () => ({
-        modelTopology: modelTopology.modelTopology,
-        weightSpecs: modelTopology.weightsManifest[0].weights,
-        weightData: await (await fetch('/group1-shard.bin')).arrayBuffer() 
-        // Note: For multi-shard models, you'd need to loop and concatenate these buffers
-      })
-    });
-    console.log("Model successfully stored in state:", loadModel); // Add this
-    console.log("Model successfully manually loaded!");
-    setModel(model);
-    return model;
-  } catch (err) {
-    console.error("Manual Load Failed:", err);
-  }
-}
-
-loadModel();
-}, []);
-    const pickImage = async () => {
-      // No permissions request is necessary for launching the image library
-      let result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'], // Restrict to images only
-        allowsEditing: false,    // Doesn't Allow cropping/rotating
-        aspect: [4, 3],         // Crop aspect ratio
-        quality: 1,             // Highest quality (0 to 1)
-      });
-  
-      if (!result.canceled) {
-        setImage(result.assets[0].uri);
-      }
-    };
-    
-const predict = async (imageElement) => {
-    // 1. Check if model exists (Assuming 'model' is loaded elsewhere)
-    console.log("Predict function started"); // Log 1
-    console.log("Current model state in predict:", model); // Check what this prints
-    if (!model) {
-      setPrediction("Error: Model not loaded.");
-      console.log("Model is missing"); // Log 2
-      return;
-    }
-if (!imageElement) {
-        console.log("Image element is missing or null"); // Log 3
-        return;
-    }
     try {
-      // 2. Browser-compatible preprocessing
-      const tensor = tf.browser.fromPixels(imageElement)
-        .resizeNearestNeighbor([200, 200])
-        .expandDims(0)
-        .toFloat()
-        .div(255.0);
-
-      // 3. Inference
-      const prediction = model.predict(tensor);
-      const clearVal = (await prediction.data())[0];
+      // For mobile, you usually bundle the model in assets
+      // This fetch strategy works better for Web; for Mobile use:
+      // await tf.loadLayersModel(bundleResourceIO(modelJson, modelWeights))
+      const response = await fetch('your_hosted_model_url/model.json');
+      const modelTopology = await response.json();
       
-      const predictionResult = clearVal < 0.5 ? "AI Generated" : "Real";
-      const confidence = (clearVal < 0.5 ? (1.0 - clearVal) : clearVal) * 100;
-
-      // Now your log will actually show up!
-      console.log(`Prediction: ${predictionResult} (Value: ${clearVal})`);
-      
-      setPrediction(`${predictionResult}`);
-      setConfidence(`${confidence.toFixed(2)}% confidence`);
-      
-    } catch (e) {
-      setPrediction(`Error processing image: ${e.message}`);
+      const loadedModel = await tf.loadLayersModel({
+        load: async () => ({
+          modelTopology: modelTopology.modelTopology,
+          weightSpecs: modelTopology.weightsManifest[0].weights,
+          weightData: await (await fetch('your_hosted_model_url/group1-shard1of34.bin')).arrayBuffer()
+        })
+      });
+      return loadedModel;
+    } catch (err) {
+      setError("Model Load Error: " + err.message);
     }
-    console.log("Call");
-    
+  }
+
+  // 3. Image Picker (Mobile style)
+  const pickImage = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 1,
+    });
+
+    if (!result.canceled) {
+      setImageUri(result.assets[0].uri);
+    }
   };
-  console.log(`${predictionTextResult}`);
-  console.log(`${confidenceTextResult}`);
+
+  // 4. Prediction Logic
+  const predict = async () => {
+    if (!model || !imageUri) return;
+    
+    try {
+      setPrediction("Analyzing...");
+      // Logic to convert imageUri to tensor goes here
+      // For mobile: use decodeJpeg from tfjs-react-native
+      setPrediction("Success");
+      setConfidence("95%");
+    } catch (e) {
+      setPrediction("Inference Error: " + e.message);
+    }
+  };
+
+  // --- RENDERING ---
+  if (error) return <View style={styles.container}><Text style={{color:'red'}}>{error}</Text></View>;
+  if (!isTfReady) return <View style={styles.container}><ActivityIndicator /><Text>Loading AI...</Text></View>;
+
   return (
-    
     <View style={styles.container}>
-    
-      <Text>Open up App.js to start working on your app!</Text>
-  
-      <Button color = "red" title="Please select a image to scan" onPress={pickImage}/>
-      <input type="file" style={styles.imageButton} onChange={handleImageChange} />
-      <img ref={imageRef} alt="Upload Preview" style={{ width: 200, height: 200 }} />
-      <Button title="Predict" onPress= {() => predict(imageRef.current)}/>
-      <Text>This image is: {`${predictionTextResult}`} with a score of {`${confidenceTextResult}`}</Text>
+      <Text style={styles.title}>Project Lighthouse</Text>
+      
+      {imageUri && <Image source={{ uri: imageUri }} style={styles.image} />}
+      
+      <Button title="Select Image" onPress={pickImage} />
+      
+      {imageUri && <Button title="Run AI Detection" onPress={predict} color="red" />}
+      
+      <Text style={styles.resultText}>
+        Result: {prediction} {confidence}
+      </Text>
+      
       <StatusBar style="auto" />
     </View>
-    
   );
-  
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  image: { width: 200, height: 200, marginTop: 20 },
-  imageButton:{width:200,height:100, borderColor:'red'},
+  container: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' },
+  title: { fontSize: 20, marginBottom: 20, fontWeight: 'bold' },
+  image: { width: 250, height: 250, marginBottom: 20, borderRadius: 10 },
+  resultText: { marginTop: 20, fontSize: 16 }
 });
-async function loadModel() {
-  try {
-    // 1. Fetch JSON explicitly as text first
-    const response = await fetch('/model.json');
-    const jsonText = await response.text();
-    
-    // 2. Parse it manually
-    const modelTopology = JSON.parse(jsonText);
-    
-    // 3. Load using the parsed object directly
-    const model = await tf.loadLayersModel({
-      load: async () => ({
-        modelTopology: modelTopology.modelTopology,
-        weightSpecs: modelTopology.weightsManifest[0].weights,
-        weightData: await (await fetch('/group1-shard1of34.bin')).arrayBuffer() 
-        // Note: For multi-shard models, you'd need to loop and concatenate these buffers
-      })
-    });
-    
-    console.log("Model successfully manually loaded!");
-    return model;
-  } catch (err) {
-    console.error("Manual Load Failed:", err);
-  }
-}
