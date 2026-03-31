@@ -24,11 +24,13 @@ const [error, setError] = useState(null);
       imageRef.current.onload = () => predict(imageRef.current);
     }
   };
+  
   useEffect(() => {
     async function setup() {
       try {
         await tf.ready();
         // load your model here
+        setIsTfReady(true);
       } catch (e) {
         setError(e.message); // This will show the error on the screen instead of crashing
       }
@@ -40,7 +42,21 @@ const [error, setError] = useState(null);
     return <Text style={{marginTop: 50, color: 'red'}}>Error: {error}</Text>;
   }
 
-  return <YourNormalAppConfig />;
+ return (
+    
+    <View style={styles.container}>
+    
+      <Text>Open up App.js to start working on your app!</Text>
+  
+      <Button color = "red" title="Please select a image to scan" onPress={pickImage}/>
+      <input type="file" style={styles.imageButton} onChange={handleImageChange} />
+      <img ref={imageRef} alt="Upload Preview" style={{ width: 200, height: 200 }} />
+      <Button title="Predict" onPress= {() => predict(imageRef.current)}/>
+      <Text>This image is: {`${predictionTextResult}`} with a score of {`${confidenceTextResult}`}</Text>
+      <StatusBar style="auto" />
+    </View>
+    
+  );
 }
 useEffect(() => {
   let model;
