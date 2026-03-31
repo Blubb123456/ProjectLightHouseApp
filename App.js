@@ -3,7 +3,7 @@ import { StyleSheet, Text, View,  Component } from 'react-native';
 import { Button, Image } from 'react-native'
 import React, { useEffect,useState, useRef } from 'react';
 import * as ImagePicker from 'expo-image-picker';
-import * as tf from '@tensorflow/tfjs';
+//import * as tf from '@tensorflow/tfjs';
 
 export default function App() {
   const [image, setImage] = useState(null); 
