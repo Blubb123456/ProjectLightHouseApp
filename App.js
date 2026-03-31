@@ -15,7 +15,7 @@ const test = "bnlamodwf";
 const predictionTextResult = prediction;
 const confidenceTextResult = confidence;
   const imageRef = useRef(null); // Reference to the <img> tag
-
+const [error, setError] = useState(null);
   const handleImageChange = (event) => {
     const file = event.target.files[0];
     if (file) {
@@ -24,6 +24,24 @@ const confidenceTextResult = confidence;
       imageRef.current.onload = () => predict(imageRef.current);
     }
   };
+  useEffect(() => {
+    async function setup() {
+      try {
+        await tf.ready();
+        // load your model here
+      } catch (e) {
+        setError(e.message); // This will show the error on the screen instead of crashing
+      }
+    }
+    setup();
+  }, []);
+
+  if (error) {
+    return <Text style={{marginTop: 50, color: 'red'}}>Error: {error}</Text>;
+  }
+
+  return <YourNormalAppConfig />;
+}
 useEffect(() => {
   let model;
   async function loadModel() {
