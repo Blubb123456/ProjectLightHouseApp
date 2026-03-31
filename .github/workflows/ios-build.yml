@@ -23,7 +23,9 @@ jobs:
         run: |
           rm -rf ios
           yes | npx expo prebuild --platform ios --no-install --non-interactive
-     
+
+      - name: Check Podfile Target
+        run: grep "platform :ios" ios/Podfile
           
       - name: Install Pods
         run: |
@@ -46,9 +48,8 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            AD_HOC_CODE_SIGNING_ALLOWED=YES \
-            ENABLE_BITCODE=NO \
-            OTHER_LDFLAGS="$(inherited) -ObjC"
+            AD_HOC_CODE_SIGNING_ALLOWED=YES 
+            
 
       - name: Package into IPA
         run: |
