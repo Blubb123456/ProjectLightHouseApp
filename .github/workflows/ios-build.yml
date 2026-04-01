@@ -49,6 +49,7 @@ jobs:
           WORKSPACE_PATH=$(find ios -name "*.xcworkspace" | head -1)
           SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
           echo "Building Workspace: $WORKSPACE_PATH with Scheme: $SCHEME_NAME"
+          
           xcodebuild archive \
             -workspace "$WORKSPACE_PATH" \
             -scheme "$SCHEME_NAME" \
@@ -56,20 +57,19 @@ jobs:
             -archivePath build/ProjectLighthouse.xcarchive \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
+            -quiet \
             EXCLUDED_ARCHS="x86_64" \
             ENABLE_BITCODE=NO \
             SKIP_INSTALL=NO \
             CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
-            SKIP_INSTALL=NO \
-            HEADER_SEARCH_PATHS='$(inherited) "${PODS_ROOT}/Headers/Public/React-Core"' \
-            OTHER_LDFLAGS='$(inherited) -framework "Accelerate"' \
+            CLANG_WARN_NULLABILITY_COMPLETENESS=NO \
+            OTHER_CFLAGS='$(inherited) -Wno-nullability-completeness' \
+            OTHER_CPLUSPLUSFLAGS='$(inherited) -fno-aligned-allocation -Wno-nullability-completeness' \
             CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES=YES \
-            OTHER_CPLUSPLUSFLAGS='$(inherited) -fno-aligned-allocation' \
-            COMPILER_INDEX_STORE_ENABLE=NO \
-            CLANG_ENABLE_MODULE_DEBUGGING=NO 
+            HEADER_SEARCH_PATHS='$(inherited) "${PODS_ROOT}/Headers/Public/React-Core"'
             -quiet
 
       - name: Package into IPA
