@@ -18,11 +18,13 @@ jobs:
 
       - name: Install dependencies
         run: npm install
-
+      - name: Install TFJS React Native
+        run: npx expo install @tensorflow/tfjs-react-native @tensorflow/tfjs expo-file-system
+      
       - name: Generate iOS Folder (Prebuild)
         run: |
           rm -rf ios
-          yes | npx expo prebuild --platform ios --no-install --non-interactive
+          yes | npx expo prebuild --platform ios --template blank --no-install --non-interactive
 
       - name: Check Podfile Target
         run: grep "platform :ios" ios/Podfile
