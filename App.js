@@ -35,16 +35,15 @@ export default function App() {
       // For mobile, you usually bundle the model in assets
       // This fetch strategy works better for Web; for Mobile use:
       // await tf.loadLayersModel(bundleResourceIO(modelJson, modelWeights))
-      const response = await fetch('your_hosted_model_url/model.json');
-      const modelTopology = await response.json();
+    // 1. Use the PUBLIC URL to your GitHub Pages or Drive Direct Link
+    const modelUrl = 'https://blubb123456.github.io/ProjectLightHouseApp/model/model.json';
+    
+    // 2. Simply pass the URL to loadLayersModel
+    // TensorFlow is smart enough to look for the .bin shards in that same folder!
+    const loadedModel = await tf.loadLayersModel(modelUrl);
       
       const loadedModel = await tf.loadLayersModel({
-        load: async () => ({
-          modelTopology: modelTopology.modelTopology,
-          weightSpecs: modelTopology.weightsManifest[0].weights,
-          weightData: await (await fetch('your_hosted_model_url/group1-shard1of34.bin')).arrayBuffer()
-        })
-      });
+      console.log("Model loaded successfully from remote URL!");
       return loadedModel;
     } catch (err) {
       setError("Model Load Error: " + err.message);
