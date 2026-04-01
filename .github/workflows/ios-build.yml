@@ -28,13 +28,17 @@ jobs:
         run: |
           rm -rf ios
           npx expo prebuild --platform ios --clean --no-install
-
+      
+      - name: Patch Podfile for TensorFlow
+        run: |
+          sed -i '' "s/config.build_settings\['GCC_PREPROCESSOR_DEFINITIONS'\] ||= \[/config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['IS_GPUTEST=1', /g" ios/Podfile
+      
       - name: Update and Install Pods
         run: |
           cd ios
           pod repo update
           pod install
-
+      
       - name: Build Unsigned Archive
         env:
           ENTRY_FILE: App.js
@@ -58,7 +62,8 @@ jobs:
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
             SKIP_INSTALL=NO \
             HEADER_SEARCH_PATHS='$(inherited) "${PODS_ROOT}/Headers/Public/React-Core"' \
-            OTHER_LDFLAGS='$(inherited) -framework "Accelerate"'
+            OTHER_LDFLAGS='$(inherited) -framework "Accelerate"' \
+            -quiet
 
       - name: Package into IPA
         run: |
