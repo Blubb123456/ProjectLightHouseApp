@@ -10,50 +10,36 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         
-        env:
-          NODE_OPTIONS: "--max-old-space-size=8192" # Give it 8GB of RAM
-      
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20 # Use a stable LTS version
+          node-version: 20
           cache: 'npm'
 
-      - name: Clean and Install
+      - name: Install Dependencies
+        env:
+          NODE_OPTIONS: "--max-old-space-size=8192"
         run: |
           rm -rf node_modules
-          rm -f package-lock.json
           npm install
+          npx expo install @tensorflow/tfjs-react-native @tensorflow/tfjs expo-file-system
 
-      - name: Install dependencies
-        run: npm install
-        env:
-          NODE_OPTIONS: "--max-old-space-size=4096"
-      
-      - name: Install TFJS React Native
-        run: npx expo install @tensorflow/tfjs-react-native @tensorflow/tfjs expo-file-system
-      
       - name: Generate iOS Folder (Prebuild)
         run: |
           rm -rf ios
-          run: npx expo prebuild --platform ios --clean --no-install
+          npx expo prebuild --platform ios --clean --no-install
 
-      - name: Check Podfile Target
-        run: grep "platform :ios" ios/Podfile
-      
-      - name: Update Pods
-        run: cd ios && pod repo update   
-      
-      - name: Install Pods
+      - name: Update and Install Pods
         run: |
           cd ios
+          pod repo update
           pod install
 
       - name: Build Unsigned Archive
         env:
-          ENTRY_FILE: App.js # Tell it to use App.js instead of index.js
+          ENTRY_FILE: App.js
         run: |
-         WORKSPACE_PATH=$(find ios -name "*.xcworkspace" | head -1)
+          WORKSPACE_PATH=$(find ios -name "*.xcworkspace" | head -1)
           SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
           
           xcodebuild archive \
@@ -65,8 +51,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            AD_HOC_CODE_SIGNING_ALLOWED=YES 
-            
+            AD_HOC_CODE_SIGNING_ALLOWED=YES
 
       - name: Package into IPA
         run: |
