@@ -4,6 +4,8 @@ import { StatusBar } from 'expo-status-bar';
 import * as tf from '@tensorflow/tfjs';
 import '@tensorflow/tfjs-react-native'; // Essential for mobile
 import * as ImagePicker from 'expo-image-picker';
+import { decodeJpeg } from '@tensorflow/tfjs-react-native';
+import * as FileSystem from 'expo-file-system';
 
 export default function App() {
   const [imageUri, setImageUri] = useState(null);
@@ -64,18 +66,46 @@ export default function App() {
 
   // 4. Prediction Logic
   const predict = async () => {
-    if (!model || !imageUri) return;
+  if (!model || !imageUri) return;
+  
+  try {
+    setPrediction("Analyzing...");
+
+    // 1. Convert image to base64
+    const imgB64 = await FileSystem.readAsStringAsync(imageUri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    const imgBuffer = tf.util.encodeString(imgB64, 'base64').buffer;
+    const rawData = new Uint8Array(imgBuffer);
+
+    // 2. Turn into a Tensor
+    const imageTensor = decodeJpeg(rawData); 
+    const predictionTensor = tf.tidy(() => {
+      return model.predict(
+        imageTensor
+          .resizeNearestNeighbor([200, 200]) // Match your model's input size
+          .expandDims(0)
+          .toFloat()
+          .div(255.0)
+      );
+    });
+
+    // 3. Get Results
+    const resultValue = await predictionTensor.data();
+    const clearVal = resultValue[0];
     
-    try {
-      setPrediction("Analyzing...");
-      // Logic to convert imageUri to tensor goes here
-      // For mobile: use decodeJpeg from tfjs-react-native
-      setPrediction("Success");
-      setConfidence("95%");
-    } catch (e) {
-      setPrediction("Inference Error: " + e.message);
-    }
-  };
+    const isReal = clearVal > 0.5; 
+    setPrediction(isReal ? "Real" : "AI Generated");
+    setConfidence(`${(isReal ? clearVal : 1 - clearVal * 100).toFixed(2)}%`);
+
+    // Cleanup memory
+    imageTensor.dispose();
+    predictionTensor.dispose();
+
+  } catch (e) {
+    setPrediction("Inference Error: " + e.message);
+  }
+};
 
   // --- RENDERING ---
   if (error) return <View style={styles.container}><Text style={{color:'red'}}>{error}</Text></View>;
