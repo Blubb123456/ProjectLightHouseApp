@@ -41,8 +41,6 @@ export default function App() {
     // 2. Simply pass the URL to loadLayersModel
     // TensorFlow is smart enough to look for the .bin shards in that same folder!
     const loadedModel = await tf.loadLayersModel(modelUrl);
-      
-      const loadedModel = await tf.loadLayersModel({
       console.log("Model loaded successfully from remote URL!");
       return loadedModel;
     } catch (err) {
