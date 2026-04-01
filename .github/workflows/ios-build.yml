@@ -48,10 +48,13 @@ jobs:
             -configuration Release \
             -archivePath build/ProjectLighthouse.xcarchive \
             -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            EXCLUDED_ARCHS="x86_64" \
+            ENABLE_BITCODE=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            AD_HOC_CODE_SIGNING_ALLOWED=YES
+            AD_HOC_CODE_SIGNING_ALLOWED=YES | tee xcode_build.log | xcpretty || (cat xcode_build.log && exit 1)
 
       - name: Package into IPA
         run: |
