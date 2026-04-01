@@ -31,7 +31,10 @@ jobs:
 
       - name: Check Podfile Target
         run: grep "platform :ios" ios/Podfile
-          
+      
+      - name: Update Pods
+        run: cd ios && pod repo update   
+      
       - name: Install Pods
         run: |
           cd ios
