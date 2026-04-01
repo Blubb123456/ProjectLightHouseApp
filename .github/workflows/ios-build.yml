@@ -39,6 +39,9 @@ jobs:
           pod repo update
           pod install
       
+      - name: Clear Xcode Cache
+        run: rm -rf ~/Library/Developer/Xcode/DerivedDat
+      
       - name: Build Unsigned Archive
         env:
           ENTRY_FILE: App.js
@@ -64,7 +67,9 @@ jobs:
             HEADER_SEARCH_PATHS='$(inherited) "${PODS_ROOT}/Headers/Public/React-Core"' \
             OTHER_LDFLAGS='$(inherited) -framework "Accelerate"' \
             CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES=YES \
-            OTHER_CPLUSPLUSFLAGS='$(inherited) -fno-aligned-allocation' 
+            OTHER_CPLUSPLUSFLAGS='$(inherited) -fno-aligned-allocation' \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            CLANG_ENABLE_MODULE_DEBUGGING=NO 
             -quiet
 
       - name: Package into IPA
