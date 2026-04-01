@@ -56,7 +56,9 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
-            SKIP_INSTALL=NO
+            SKIP_INSTALL=NO \
+            HEADER_SEARCH_PATHS='$(inherited) "${PODS_ROOT}/Headers/Public/React-Core"' \
+            OTHER_LDFLAGS='$(inherited) -framework "Accelerate"'
 
       - name: Package into IPA
         run: |
