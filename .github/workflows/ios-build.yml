@@ -9,12 +9,21 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
+        
+        env:
+          NODE_OPTIONS: "--max-old-space-size=8192" # Give it 8GB of RAM
+      
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 20 # Use a stable LTS version
           cache: 'npm'
+
+      - name: Clean and Install
+        run: |
+          rm -rf node_modules
+          rm -f package-lock.json
+          npm install
 
       - name: Install dependencies
         run: npm install
@@ -27,7 +36,7 @@ jobs:
       - name: Generate iOS Folder (Prebuild)
         run: |
           rm -rf ios
-          yes | npx expo prebuild --platform ios --template blank --no-install --non-interactive
+          run: npx expo prebuild --platform ios --clean --no-install
 
       - name: Check Podfile Target
         run: grep "platform :ios" ios/Podfile
