@@ -41,7 +41,7 @@ jobs:
         run: |
           WORKSPACE_PATH=$(find ios -name "*.xcworkspace" | head -1)
           SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
-          
+          echo "Building Workspace: $WORKSPACE_PATH with Scheme: $SCHEME_NAME"
           xcodebuild archive \
             -workspace "$WORKSPACE_PATH" \
             -scheme "$SCHEME_NAME" \
@@ -51,10 +51,10 @@ jobs:
             -destination 'generic/platform=iOS' \
             EXCLUDED_ARCHS="x86_64" \
             ENABLE_BITCODE=NO \
+            SKIP_INSTALL=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            AD_HOC_CODE_SIGNING_ALLOWED=YES | tee xcode_build.log | xcpretty || (cat xcode_build.log && exit 1) \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
             SKIP_INSTALL=NO
 
