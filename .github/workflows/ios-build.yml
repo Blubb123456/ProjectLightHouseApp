@@ -64,8 +64,7 @@ jobs:
             HEADER_SEARCH_PATHS='$(inherited) "${PODS_ROOT}/Headers/Public/React-Core"' \
             OTHER_LDFLAGS='$(inherited) -framework "Accelerate"' \
             CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES=YES \
-            OTHER_CPLUSPLUSFLAGS='$(inherited) -fno-aligned-allocation' \
-            | grep -A 5 "error:"
+            OTHER_CPLUSPLUSFLAGS='$(inherited) -fno-aligned-allocation' 
             -quiet
 
       - name: Package into IPA
