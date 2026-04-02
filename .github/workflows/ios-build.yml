@@ -23,14 +23,38 @@ jobs:
           rm -rf ios
           npx expo prebuild --platform ios --clean --no-install
 
-      - name: Surgical Podfile Injection
+      - name: Surgical Podfile Patch
         run: |
           cd ios
-          # 1. Add the UUID fix to the very top
-          sed -i '' '1i\'$'\n''install! "cocoapods", :deterministic_uuids => false' Podfile
+          ruby -e "
+          path = 'Podfile'
+          content = File.read(path)
           
-          # 2. Inject our build settings into the EXISTING post_install block
-          ruby -i -pe 'sub(/post_install do \|installer\|/, "post_install do |installer|\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |config|\n      config.build_settings[\"SWIFT_VERSION\"] = \"5.0\"\n      config.build_settings[\"CLANG_ENABLE_EXPLICIT_MODULES\"] = \"NO\"\n      config.build_settings[\"CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES\"] = \"YES\"\n      config.build_settings[\"CLANG_WARN_NULLABILITY_COMPLETENESS\"] = \"NO\"\n      config.build_settings[\"ALWAYS_SEARCH_USER_PATHS\"] = \"YES\"\n    end\n  end")' Podfile
+          # 1. Fix the top line (Deterministic UUIDs)
+          unless content.include?('deterministic_uuids')
+            content.prepend(\"install! 'cocoapods', :deterministic_uuids => false\n\")
+          end
+          
+          # 2. Inject our build flags into the EXISTING post_install block
+          # This prevents the 'multiple post_install hooks' error
+          flags = %q{
+          config.build_settings['SWIFT_VERSION'] = '5.0'
+          config.build_settings['CLANG_ENABLE_EXPLICIT_MODULES'] = 'NO'
+          config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+          config.build_settings['CLANG_WARN_NULLABILITY_COMPLETENESS'] = 'NO'
+          config.build_settings['ALWAYS_SEARCH_USER_PATHS'] = 'YES'
+          config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
+          }
+          
+          if content.include?('post_install do |installer|')
+            content.sub!('post_install do |installer|', \"post_install do |installer|\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |config|\n#{flags}    end\n  end\")
+          else
+            # Fallback if no post_install exists (unlikely with Expo)
+            content += \"\npost_install do |installer|\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |config|\n#{flags}    end\n  end\nend\n\"
+          end
+          
+          File.write(path, content)
+          
 
       - name: Install Pods
         run: |
