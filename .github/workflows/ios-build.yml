@@ -76,6 +76,7 @@ jobs:
         run: |
           WORKSPACE_PATH=$(find . -name "*.xcworkspace" | head -1)
           SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
+          set -o pipefail
           xcodebuild archive \
             -workspace "$WORKSPACE_PATH" \
             -scheme "$SCHEME_NAME" \
@@ -95,12 +96,19 @@ jobs:
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
             HEADER_SEARCH_PATHS='$(inherited) "${PODS_ROOT}/Headers/Public/React-Core" "${PODS_ROOT}/Headers/Public/TensorFlowLiteC"' \
             OTHER_LDFLAGS='$(inherited) -Wl,-no_compact_unwind' \
-            | tee build.log | grep -A 5 "error:" || true
+            | tee build.log
 
       - name: Package into IPA
         run: |
           mkdir -p build/Payload
-          APP_PATH=$(find build/ProjectLighthouse.xcarchive/Products/Applications -name "*.app" | head -1)
+          # Search more broadly for the .app file inside the archive
+          APP_PATH=$(find build/ProjectLighthouse.xcarchive -name "*.app" | head -1)
+          
+          if [ -z "$APP_PATH" ]; then
+            echo "ERROR: No .app file found. The build likely failed."
+            exit 1
+          fi
+          
           cp -r "$APP_PATH" build/Payload/
           cd build
           zip -r ProjectLighthouse.ipa Payload
