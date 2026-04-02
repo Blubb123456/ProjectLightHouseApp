@@ -23,14 +23,18 @@ jobs:
           rm -rf ios
           npx expo prebuild --platform ios --clean --no-install
 
-      - name: Sledgehammer Podfile Patch
+      - name: Precise Podfile Patch
         run: |
           cd ios
-          # 1. Disable Deterministic UUIDs
-          sed -i '' '1i\'$'\n''install! "cocoapods", :deterministic_uuids => false' Podfile
+          # 1. Create a brand new header with the UUID fix and a proper newline
+          printf 'install! "cocoapods", :deterministic_uuids => false\n' > Podfile.new
           
-          # 2. Inject the post_install block right before the end of the file
-          # This avoids the "Multiple post_install" error by appending it safely
+          # 2. Append the rest of the original Podfile to the new header
+          cat Podfile >> Podfile.new
+          mv Podfile.new Podfile
+          
+          # 3. Append the Project Lighthouse overrides to the bottom
+          echo "" >> Podfile
           echo "post_install do |installer|" >> Podfile
           echo "  installer.pods_project.targets.each do |target|" >> Podfile
           echo "    target.build_configurations.each do |config|" >> Podfile
@@ -39,8 +43,9 @@ jobs:
           echo "      config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'" >> Podfile
           echo "      config.build_settings['CLANG_WARN_NULLABILITY_COMPLETENESS'] = 'NO'" >> Podfile
           echo "      config.build_settings['ALWAYS_SEARCH_USER_PATHS'] = 'YES'" >> Podfile
+          echo "      config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'" >> Podfile
           echo "    end" >> Podfile
-          echo "  end" >> Pod=file
+          echo "  end" >> Podfile
           echo "end" >> Podfile
 
 
