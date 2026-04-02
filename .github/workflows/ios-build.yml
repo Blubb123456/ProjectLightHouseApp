@@ -58,6 +58,8 @@ jobs:
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -quiet \
+            SWIFT_VERSION=5.0 \
+            OTHER_SWIFT_FLAGS='-Xfrontend -disable-implicit-concurrency-module-import' \
             EXCLUDED_ARCHS="x86_64" \
             ENABLE_BITCODE=NO \
             SKIP_INSTALL=NO \
