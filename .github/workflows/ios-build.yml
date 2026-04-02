@@ -21,6 +21,10 @@ jobs:
       - name: Generate iOS Folder (Prebuild)
         run: npx expo prebuild --platform ios --clean --no-install
 
+      - name: Force Swift 5 and Disable Strict Checks
+        run: |
+          sed -i '' 's/use_react_native!(/post_install do |installer|\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |config|\n      config.build_settings["SWIFT_VERSION"] = "5.0"\n      config.build_settings["OTHER_SWIFT_FLAGS"] = "-Xfrontend -suppress-warnings"\n      config.build_settings["CLANG_WARN_NULLABILITY_COMPLETENESS"] = "NO"\n    end\n  end\nend\n\nuse_react_native!(/g' ios/Podfile
+        
       - name: Patch Podfile for Compatibility
         run: |
           # This forces all pods to Swift 5 to stop the "InnerType" shadowing error
