@@ -21,17 +21,13 @@ jobs:
       - name: Generate iOS Folder (Prebuild)
         run: npx expo prebuild --platform ios --clean --no-install
 
-      - name: Force Swift 5 and Disable Strict Checks
-        run: |
-          sed -i '' 's/use_react_native!(/post_install do |installer|\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |config|\n      config.build_settings["SWIFT_VERSION"] = "5.0"\n      config.build_settings["OTHER_SWIFT_FLAGS"] = "-Xfrontend -suppress-warnings"\n      config.build_settings["CLANG_WARN_NULLABILITY_COMPLETENESS"] = "NO"\n    end\n  end\nend\n\nuse_react_native!(/g' ios/Podfile
-        
-      - name: Patch Podfile for Compatibility
+      - name: Ultimate Podfile Patch
         run: |
           cd ios
-          # Insert the Swift 5 and Nullability fix at the top of the Podfile
+          # 1. Add the deterministic UUIDs fix to the top
           sed -i '' '1i\'$'\n''install! "cocoapods", :deterministic_uuids => false' Podfile
           
-          # Append the post_install hook properly
+          # 2. Append a clean post_install block that handles everything
           cat <<EOF >> Podfile
 
           post_install do |installer|
@@ -40,11 +36,12 @@ jobs:
           config.build_settings['SWIFT_VERSION'] = '5.0'
           config.build_settings['CLANG_WARN_NULLABILITY_COMPLETENESS'] = 'NO'
           config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+          config.build_settings['OTHER_SWIFT_FLAGS'] = '-Xfrontend -suppress-warnings'
           end
           end
           end
           EOF
-
+     
       - name: Install Pods
         run: |
           cd ios
