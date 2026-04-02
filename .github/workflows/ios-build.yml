@@ -60,7 +60,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -quiet \
             SWIFT_VERSION=5.0 \
-            OTHER_SWIFT_FLAGS='-Xfrontend -disable-implicit-concurrency-module-import' \
+            OTHER_SWIFT_FLAGS="-Xfrontend -suppress-warnings" \
             EXCLUDED_ARCHS="x86_64" \
             ENABLE_BITCODE=NO \
             SKIP_INSTALL=NO \
@@ -69,11 +69,9 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
             CLANG_WARN_NULLABILITY_COMPLETENESS=NO \
-            OTHER_CFLAGS='$(inherited) -Wno-nullability-completeness' \
-            OTHER_CPLUSPLUSFLAGS='$(inherited) -fno-aligned-allocation -Wno-nullability-completeness' \
             CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES=YES \
-            HEADER_SEARCH_PATHS='$(inherited) "${PODS_ROOT}/Headers/Public/React-Core"'
-            -quiet
+            OTHER_CFLAGS='$(inherited) -Wno-nullability-completeness' \
+            OTHER_CPLUSPLUSFLAGS='$(inherited) -fno-aligned-allocation -Wno-nullability-completeness'
 
       - name: Package into IPA
         run: |
