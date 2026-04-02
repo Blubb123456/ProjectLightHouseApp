@@ -21,19 +21,21 @@ jobs:
       - name: Generate iOS Folder (Prebuild)
         run: npx expo prebuild --platform ios --clean --no-install
 
-      - name: Create Patch Script
+      - name: Surgical Podfile Patch
         run: |
+          cd ios
           cat <<'EOF' > patch_podfile.rb
-          path = 'ios/Podfile'
+          path = 'Podfile'
           content = File.read(path)
           
-          # This block fixes the Swift 6 shadowing and Nullability errors
           patch_code = <<-RUBY
-          
           post_install do |installer|
           installer.pods_project.targets.each do |target|
           target.build_configurations.each do |config|
+          # Force Swift 5 to fix the 'InnerType' shadowing error
           config.build_settings['SWIFT_VERSION'] = '5.0'
+          # Disable the new Xcode 16 Explicit Modules check
+          config.build_settings['CLANG_ENABLE_EXPLICIT_MODULES'] = 'NO'
           config.build_settings['CLANG_WARN_NULLABILITY_COMPLETENESS'] = 'NO'
           config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
           config.build_settings['OTHER_SWIFT_FLAGS'] = '-Xfrontend -suppress-warnings'
@@ -41,14 +43,11 @@ jobs:
           end
           end
           RUBY
-
-          # Remove any existing post_install block created by Expo to prevent Code 1
+          # Remove any existing post_install block to prevent Code 1
           content.gsub!(/post_install do.*?end/m, '')
           File.write(path, content + "\n" + patch_code)
           EOF
-
-      - name: Execute Patch
-        run: ruby patch_podfile.rb
+          ruby patch_podfile.rb
 
 
       - name: Install Pods
@@ -72,7 +71,8 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            AD_HOC_CODE_SIGNING_ALLOWED=YES
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            COMPILER_INDEX_STORE_ENABLE=NO
 
       - name: Package into IPA
         run: |
