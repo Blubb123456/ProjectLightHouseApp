@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -14,29 +14,29 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
 
       - name: Install Dependencies
-        env:
-          NODE_OPTIONS: "--max-old-space-size=8192"
-        run: |
-          npm install
-          npx expo install @tensorflow/tfjs-react-native @tensorflow/tfjs expo-file-system
+        run: npm install
 
       - name: Generate iOS Folder (Prebuild)
         run: npx expo prebuild --platform ios --clean --no-install
 
-      - name: Fix CocoaPods for MacOS-14
+      - name: Patch Podfile for Compatibility
         run: |
-          sudo gem install cocoapods
-          cd ios && pod repo update
+          # This forces all pods to Swift 5 to stop the "InnerType" shadowing error
+          echo "post_install do |installer|
+            installer.pods_project.targets.each do |target|
+              target.build_configurations.each do |config|
+                config.build_settings['SWIFT_VERSION'] = '5.0'
+                config.build_settings['CLANG_WARN_NULLABILITY_COMPLETENESS'] = 'NO'
+              end
+            end
+          end" >> ios/Podfile
 
       - name: Install Pods
         run: cd ios && pod install
 
       - name: Build Unsigned Archive
-        env:
-          ENTRY_FILE: App.js
         run: |
           WORKSPACE_PATH=$(find . -name "*.xcworkspace" | head -1)
           SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
@@ -49,18 +49,11 @@ jobs:
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -quiet \
-            SWIFT_VERSION=5.0 \
-            EXCLUDED_ARCHS="x86_64" \
-            ENABLE_BITCODE=NO \
             SKIP_INSTALL=NO \
             CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
-            AD_HOC_CODE_SIGNING_ALLOWED=YES \
-            CLANG_WARN_NULLABILITY_COMPLETENESS=NO \
-            CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES=YES \
-            OTHER_CFLAGS='$(inherited) -Wno-nullability-completeness' \
-            OTHER_CPLUSPLUSFLAGS='$(inherited) -fno-aligned-allocation -Wno-nullability-completeness'
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES
 
       - name: Package into IPA
         run: |
