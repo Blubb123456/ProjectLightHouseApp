@@ -46,7 +46,8 @@ jobs:
         env:
           ENTRY_FILE: App.js
         run: |
-          WORKSPACE_PATH=$(find ios -name "*.xcworkspace" | head -1)
+          # Use this in the Build Archive step
+          WORKSPACE_PATH=$(find . -name "*.xcworkspace" | head -1)
           SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
           echo "Building Workspace: $WORKSPACE_PATH with Scheme: $SCHEME_NAME"
           
@@ -78,7 +79,8 @@ jobs:
         run: |
           mkdir -p build/Payload
           # This finds the .app file regardless of its name
-          APP_PATH=$(find build/ProjectLighthouse.xcarchive/Products/Applications -name "*.app" | head -1)
+          # Use this in the Package into IPA step
+          APP_PATH=$(find . -name "*.app" -path "*/Release-iphoneos/*" | head -1)
           echo "Found App at: $APP_PATH"
           
           if [ -z "$APP_PATH" ]; then
