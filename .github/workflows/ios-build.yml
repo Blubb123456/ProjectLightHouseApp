@@ -19,7 +19,9 @@ jobs:
         run: npm install
 
       - name: Generate iOS Folder (Prebuild)
-        run: npx expo prebuild --platform ios --clean --no-install
+       run: |
+          rm -rf ios
+          npx expo prebuild --platform ios --clean --no-install
 
       - name: Kill Spec Checks and Force Build
         run: |
@@ -95,7 +97,9 @@ jobs:
             CLANG_ENABLE_EXPLICIT_MODULES=NO \
             NODE_BINARY=$(which node) \
             GCC_WARN_INHIBIT_ALL_WARNINGS=YES \
-            ENABLE_USER_SCRIPT_SANDBOXING=NO 
+            ENABLE_USER_SCRIPT_SANDBOXING=NO \
+            HEADER_SEARCH_PATHS='$(inherited) "${PODS_ROOT}/Headers/Public/React-Core" "${PODS_ROOT}/Headers/Public/TensorFlowLiteC"' \
+            OTHER_LDFLAGS='$(inherited) -Wl,-no_compact_unwind'
 
       - name: Package into IPA
         run: |
