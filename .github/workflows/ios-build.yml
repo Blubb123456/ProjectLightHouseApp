@@ -21,14 +21,15 @@ jobs:
       - name: Generate iOS Folder (Prebuild)
         run: npx expo prebuild --platform ios --clean --no-install
 
-      - name: Surgical Podfile Patch
+      - name: Create Patch Script
         run: |
-          cd ios
-          # This Ruby script safely finds the existing post_install or adds one if missing
-          ruby -e "
-          path = 'Podfile'
+          cat <<'EOF' > patch_podfile.rb
+          path = 'ios/Podfile'
           content = File.read(path)
-          patch = %q{
+          
+          # This block fixes the Swift 6 shadowing and Nullability errors
+          patch_code = <<-RUBY
+          
           post_install do |installer|
           installer.pods_project.targets.each do |target|
           target.build_configurations.each do |config|
@@ -38,6 +39,16 @@ jobs:
           config.build_settings['OTHER_SWIFT_FLAGS'] = '-Xfrontend -suppress-warnings'
           end
           end
+          end
+          RUBY
+
+          # Remove any existing post_install block created by Expo to prevent Code 1
+          content.gsub!(/post_install do.*?end/m, '')
+          File.write(path, content + "\n" + patch_code)
+          EOF
+
+      - name: Execute Patch
+        run: ruby patch_podfile.rb
 
 
       - name: Install Pods
