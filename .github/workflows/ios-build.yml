@@ -21,33 +21,34 @@ jobs:
       - name: Generate iOS Folder (Prebuild)
         run: npx expo prebuild --platform ios --clean --no-install
 
-      - name: Surgical Podfile Patch
+      - name: Kill Xcode 16 Module Scanning
         run: |
           cd ios
           cat <<'EOF' > patch_podfile.rb
           path = 'Podfile'
           content = File.read(path)
-          
           patch_code = <<-RUBY
           post_install do |installer|
           installer.pods_project.targets.each do |target|
           target.build_configurations.each do |config|
-          # Force Swift 5 to fix the 'InnerType' shadowing error
+          # Fix the 'InnerType' shadowing and Xcode 16 module errors
           config.build_settings['SWIFT_VERSION'] = '5.0'
-          # Disable the new Xcode 16 Explicit Modules check
           config.build_settings['CLANG_ENABLE_EXPLICIT_MODULES'] = 'NO'
           config.build_settings['CLANG_WARN_NULLABILITY_COMPLETENESS'] = 'NO'
           config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
           config.build_settings['OTHER_SWIFT_FLAGS'] = '-Xfrontend -suppress-warnings'
+      
+          
+          end
           end
           end
           end
           RUBY
-          # Remove any existing post_install block to prevent Code 1
+          # Wipe existing post_install blocks to avoid Code 1
           content.gsub!(/post_install do.*?end/m, '')
           File.write(path, content + "\n" + patch_code)
           EOF
-          ruby patch_podfile.rb
+          ruby patch_podfile.r
 
 
       - name: Install Pods
@@ -72,7 +73,8 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
-            COMPILER_INDEX_STORE_ENABLE=NO
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            CLANG_ENABLE_EXPLICIT_MODULES=NO
 
       - name: Package into IPA
         run: |
