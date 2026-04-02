@@ -54,7 +54,7 @@ jobs:
           end
           
           File.write(path, content)
-EOF
+          EOF
           # Run the script we just created
           ruby patch_script.rb
           
