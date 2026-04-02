@@ -23,39 +23,25 @@ jobs:
           rm -rf ios
           npx expo prebuild --platform ios --clean --no-install
 
-      - name: Kill Spec Checks and Force Build
+      - name: Sledgehammer Podfile Patch
         run: |
           cd ios
-          cat <<'EOF' > patch_podfile.rb
-          path = 'Podfile'
-          content = File.read(path)
+          # 1. Disable Deterministic UUIDs
+          sed -i '' '1i\'$'\n''install! "cocoapods", :deterministic_uuids => false' Podfile
           
-          patch_code = <<-RUBY
-          post_install do |installer|
-          installer.pods_project.targets.each do |target|
-          target.build_configurations.each do |config|
-          config.build_settings['SWIFT_VERSION'] = '5.0'
-          config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-O'
-          config.build_settings['CLANG_ENABLE_EXPLICIT_MODULES'] = 'NO'
-          config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
-          config.build_settings['CLANG_WARN_NULLABILITY_COMPLETENESS'] = 'NO'
-          config.build_settings['ENABLE_PREVIEWS'] = 'NO'
-          config.build_settings['SWIFT_COMPILATION_MODE'] = 'wholemodule'
-          config.build_settings['ALWAYS_SEARCH_USER_PATHS'] = 'YES'
-          end
-
-          target.build_phases.each do |phase|
-          if phase.respond_to?(:name) && phase.name.include?('Check FBReactNativeSpec')
-          phase.always_out_of_date = '1'
-          end
-          end
-          end
-          end
-          RUBY
-          content = content.gsub(/post_install do.*?end/m, '')
-          File.open(path, "w") { |f| f.puts content + "\n" + patch_code }
-          EOF
-          ruby patch_podfile.rb
+          # 2. Inject the post_install block right before the end of the file
+          # This avoids the "Multiple post_install" error by appending it safely
+          echo "post_install do |installer|" >> Podfile
+          echo "  installer.pods_project.targets.each do |target|" >> Podfile
+          echo "    target.build_configurations.each do |config|" >> Podfile
+          echo "      config.build_settings['SWIFT_VERSION'] = '5.0'" >> Podfile
+          echo "      config.build_settings['CLANG_ENABLE_EXPLICIT_MODULES'] = 'NO'" >> Podfile
+          echo "      config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'" >> Podfile
+          echo "      config.build_settings['CLANG_WARN_NULLABILITY_COMPLETENESS'] = 'NO'" >> Podfile
+          echo "      config.build_settings['ALWAYS_SEARCH_USER_PATHS'] = 'YES'" >> Podfile
+          echo "    end" >> Podfile
+          echo "  end" >> Pod=file
+          echo "end" >> Podfile
 
 
       - name: Install Pods
