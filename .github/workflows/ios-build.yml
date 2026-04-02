@@ -27,18 +27,29 @@ jobs:
         
       - name: Patch Podfile for Compatibility
         run: |
-          # This forces all pods to Swift 5 to stop the "InnerType" shadowing error
-          echo "post_install do |installer|
-            installer.pods_project.targets.each do |target|
-              target.build_configurations.each do |config|
-                config.build_settings['SWIFT_VERSION'] = '5.0'
-                config.build_settings['CLANG_WARN_NULLABILITY_COMPLETENESS'] = 'NO'
-              end
-            end
-          end" >> ios/Podfile
+          cd ios
+          # Insert the Swift 5 and Nullability fix at the top of the Podfile
+          sed -i '' '1i\'$'\n''install! "cocoapods", :deterministic_uuids => false' Podfile
+          
+          # Append the post_install hook properly
+          cat <<EOF >> Podfile
+
+          post_install do |installer|
+          installer.pods_project.targets.each do |target|
+          target.build_configurations.each do |config|
+          config.build_settings['SWIFT_VERSION'] = '5.0'
+          config.build_settings['CLANG_WARN_NULLABILITY_COMPLETENESS'] = 'NO'
+          config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+          end
+          end
+          end
+          EOF
 
       - name: Install Pods
-        run: cd ios && pod install
+        run: |
+          cd ios
+          pod repo update
+          pod install
 
       - name: Build Unsigned Archive
         run: |
