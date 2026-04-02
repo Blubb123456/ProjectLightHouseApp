@@ -20,36 +20,26 @@ jobs:
         env:
           NODE_OPTIONS: "--max-old-space-size=8192"
         run: |
-          rm -rf node_modules
           npm install
           npx expo install @tensorflow/tfjs-react-native @tensorflow/tfjs expo-file-system
 
       - name: Generate iOS Folder (Prebuild)
+        run: npx expo prebuild --platform ios --clean --no-install
+
+      - name: Fix CocoaPods for MacOS-14
         run: |
-          rm -rf ios
-          npx expo prebuild --platform ios --clean --no-install
-      
-      - name: Patch Podfile for TensorFlow
-        run: |
-          sed -i '' "s/config.build_settings\['GCC_PREPROCESSOR_DEFINITIONS'\] ||= \[/config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['IS_GPUTEST=1', /g" ios/Podfile
-      
-      - name: Update and Install Pods
-        run: |
-          cd ios
-          pod repo update
-          pod install
-      
-      - name: Clear Xcode Cache
-        run: rm -rf ~/Library/Developer/Xcode/DerivedDat
-      
+          sudo gem install cocoapods
+          cd ios && pod repo update
+
+      - name: Install Pods
+        run: cd ios && pod install
+
       - name: Build Unsigned Archive
         env:
           ENTRY_FILE: App.js
         run: |
-          # Use this in the Build Archive step
           WORKSPACE_PATH=$(find . -name "*.xcworkspace" | head -1)
           SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
-          echo "Building Workspace: $WORKSPACE_PATH with Scheme: $SCHEME_NAME"
           
           xcodebuild archive \
             -workspace "$WORKSPACE_PATH" \
@@ -60,7 +50,6 @@ jobs:
             -destination 'generic/platform=iOS' \
             -quiet \
             SWIFT_VERSION=5.0 \
-            OTHER_SWIFT_FLAGS="-Xfrontend -suppress-warnings" \
             EXCLUDED_ARCHS="x86_64" \
             ENABLE_BITCODE=NO \
             SKIP_INSTALL=NO \
