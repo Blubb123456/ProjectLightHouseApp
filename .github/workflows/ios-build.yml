@@ -26,7 +26,6 @@ jobs:
       - name: Surgical Podfile Patch
         run: |
           cd ios
-          # Create the patch script without using any complex shell quoting
           cat <<'EOF' > patch_script.rb
           path = 'Podfile'
           content = File.read(path)
@@ -39,6 +38,9 @@ jobs:
           # 2. Define our Project Lighthouse build flags
           flags = <<-RUBY
           config.build_settings['SWIFT_VERSION'] = '5.0'
+          config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-O'
+          config.build_settings['SWIFT_COMPILATION_MODE'] = 'wholemodule'
+          config.build_settings['ENABLE_PREVIEWS'] = 'NO'
           config.build_settings['CLANG_ENABLE_EXPLICIT_MODULES'] = 'NO'
           config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
           config.build_settings['CLANG_WARN_NULLABILITY_COMPLETENESS'] = 'NO'
@@ -46,7 +48,7 @@ jobs:
           config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
           RUBY
           
-          # 3. Inject into the existing post_install block to avoid 'multiple hooks' error
+          # 3. Inject into the existing post_install block
           if content.include?('post_install do |installer|')
             content.sub!('post_install do |installer|', "post_install do |installer|\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |config|\n#{flags}    end\n  end")
           else
@@ -55,7 +57,6 @@ jobs:
           
           File.write(path, content)
           EOF
-          # Run the script we just created
           ruby patch_script.rb
           
 
@@ -90,12 +91,9 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
             COMPILER_INDEX_STORE_ENABLE=NO \
-            CLANG_ENABLE_EXPLICIT_MODULES=NO \
-            NODE_BINARY=$(which node) \
-            GCC_WARN_INHIBIT_ALL_WARNINGS=YES \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
-            HEADER_SEARCH_PATHS='$(inherited) "${PODS_ROOT}/Headers/Public/React-Core" "${PODS_ROOT}/Headers/Public/TensorFlowLiteC"' \
-            OTHER_LDFLAGS='$(inherited) -Wl,-no_compact_unwind' \
+            GCC_WARN_INHIBIT_ALL_WARNINGS=YES \
+            SWIFT_COMPILATION_MODE=wholemodule \
             | tee build.log
 
       - name: Package into IPA
