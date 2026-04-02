@@ -21,12 +21,14 @@ jobs:
       - name: Generate iOS Folder (Prebuild)
         run: npx expo prebuild --platform ios --clean --no-install
 
-      - name: Ultimate Podfile Patch
+      - name: Surgical Podfile Patch
         run: |
           cd ios
-          sed -i '' '1i\'$'\n''install! "cocoapods", :deterministic_uuids => false' Podfile
-          cat <<EOF >> Podfile
-          
+          # This Ruby script safely finds the existing post_install or adds one if missing
+          ruby -e "
+          path = 'Podfile'
+          content = File.read(path)
+          patch = %q{
           post_install do |installer|
           installer.pods_project.targets.each do |target|
           target.build_configurations.each do |config|
@@ -36,8 +38,7 @@ jobs:
           config.build_settings['OTHER_SWIFT_FLAGS'] = '-Xfrontend -suppress-warnings'
           end
           end
-          end
-          EOF
+
 
       - name: Install Pods
         run: |
