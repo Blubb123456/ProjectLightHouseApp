@@ -23,31 +23,14 @@ jobs:
           rm -rf ios
           npx expo prebuild --platform ios --clean --no-install
 
-      - name: Precise Podfile Patch
+      - name: Surgical Podfile Injection
         run: |
           cd ios
-          # 1. Create a brand new header with the UUID fix and a proper newline
-          printf 'install! "cocoapods", :deterministic_uuids => false\n' > Podfile.new
+          # 1. Add the UUID fix to the very top
+          sed -i '' '1i\'$'\n''install! "cocoapods", :deterministic_uuids => false' Podfile
           
-          # 2. Append the rest of the original Podfile to the new header
-          cat Podfile >> Podfile.new
-          mv Podfile.new Podfile
-          
-          # 3. Append the Project Lighthouse overrides to the bottom
-          echo "" >> Podfile
-          echo "post_install do |installer|" >> Podfile
-          echo "  installer.pods_project.targets.each do |target|" >> Podfile
-          echo "    target.build_configurations.each do |config|" >> Podfile
-          echo "      config.build_settings['SWIFT_VERSION'] = '5.0'" >> Podfile
-          echo "      config.build_settings['CLANG_ENABLE_EXPLICIT_MODULES'] = 'NO'" >> Podfile
-          echo "      config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'" >> Podfile
-          echo "      config.build_settings['CLANG_WARN_NULLABILITY_COMPLETENESS'] = 'NO'" >> Podfile
-          echo "      config.build_settings['ALWAYS_SEARCH_USER_PATHS'] = 'YES'" >> Podfile
-          echo "      config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'" >> Podfile
-          echo "    end" >> Podfile
-          echo "  end" >> Podfile
-          echo "end" >> Podfile
-
+          # 2. Inject our build settings into the EXISTING post_install block
+          ruby -i -pe 'sub(/post_install do \|installer\|/, "post_install do |installer|\n  installer.pods_project.targets.each do |target|\n    target.build_configurations.each do |config|\n      config.build_settings[\"SWIFT_VERSION\"] = \"5.0\"\n      config.build_settings[\"CLANG_ENABLE_EXPLICIT_MODULES\"] = \"NO\"\n      config.build_settings[\"CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES\"] = \"YES\"\n      config.build_settings[\"CLANG_WARN_NULLABILITY_COMPLETENESS\"] = \"NO\"\n      config.build_settings[\"ALWAYS_SEARCH_USER_PATHS\"] = \"YES\"\n    end\n  end")' Podfile
 
       - name: Install Pods
         run: |
