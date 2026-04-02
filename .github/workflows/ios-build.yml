@@ -54,6 +54,14 @@ jobs:
           cd ios
           pod install
 
+      - name: Fix React Native Path for Xcode
+        run: |
+          mkdir -p ios/scripts
+          ln -s $(pwd)/node_modules/react-native/scripts/xcode ios/scripts/xcode
+          # Force the Node path so Hermes and TensorFlow can find it
+          echo "export NODE_BINARY=$(which node)" > .xcode.env
+          echo "export NODE_BINARY=$(which node)" > ios/.xcode.env
+     
       - name: Build Unsigned Archive
         run: |
           WORKSPACE_PATH=$(find . -name "*.xcworkspace" | head -1)
@@ -72,7 +80,8 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
             COMPILER_INDEX_STORE_ENABLE=NO \
-            CLANG_ENABLE_EXPLICIT_MODULES=NO
+            CLANG_ENABLE_EXPLICIT_MODULES=NO \
+            NODE_BINARY=$(which node)
 
       - name: Package into IPA
         run: |
