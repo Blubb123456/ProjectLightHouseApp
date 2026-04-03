@@ -88,20 +88,25 @@ jobs:
       
       - name: Manual JS Bundle Generation
         run: |
-          # 1. Force install the missing config package so npx doesn't fail
-          npm install @react-native/metro-config --save-dev
+          # 1. Install Metro config and TensorFlow dependencies
+          # We include tfjs and tfjs-react-native to ensure the linker finds them
+          npm install @react-native/metro-config @tensorflow/tfjs @tensorflow/tfjs-react-native --save-dev
           
-          # 2. Clean up any previous folder-named-file mistakes
+          # 2. Standard cleanup
           rm -rf ios/main.jsbundle
           mkdir -p ios
           
-          # 3. Generate the actual bundle file
+          export NODE_BINARY=$(which node)
+          
+          # 3. Generate the bundle
+          # We add --reset-cache to ensure Metro doesn't use a stale dependency graph
           npx react-native bundle \
             --platform ios \
             --dev false \
             --entry-file index.js \
             --bundle-output ios/main.jsbundle \
-            --assets-dest ios
+            --assets-dest ios \
+            --reset-cache
       
       - name: Build Unsigned Archive
         run: |
