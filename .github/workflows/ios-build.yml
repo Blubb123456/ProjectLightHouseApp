@@ -36,29 +36,26 @@ jobs:
           
           flags_code = <<-RUBY
           post_install do |installer|
-          # 1. Kill Sandboxing at the Project Level (Crucial for RN Bundle Script)
+          # 1. Disable Sandboxing for the entire Project
           installer.pods_project.build_configurations.each do |config|
           config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+          config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
           end
 
           installer.pods_project.targets.each do |target|
           target.build_configurations.each do |config|
-          # Force modern deployment for Xcode 16.4 compatibility
-          config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-      
-           # Stop the "Disabling Previews" conflict by killing Previews entirely
+          # 2. Kill the "Disabling Previews" conflict at the source
           config.build_settings['ENABLE_PREVIEWS'] = 'NO'
+          config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-O'
       
-          # Core C++/Hermes targets must NOT have Swift flags
-          if ['React', 'hermes', 'RCT', 'Expo', 'DoubleConversion'].any? { |lib| target.name.include?(lib) }
+          # 3. Strip Swift flags from non-Swift core targets
+          if ['React', 'hermes', 'RCT', 'Expo', 'DoubleConversion', 'glog'].any? { |lib| target.name.include?(lib) }
           config.build_settings.delete('SWIFT_VERSION')
-          config.build_settings.delete('SWIFT_OPTIMIZATION_LEVEL')
           else
           config.build_settings['SWIFT_VERSION'] = '5.0'
           end
 
           config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-          config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
           end
           end
           end
@@ -89,6 +86,19 @@ jobs:
           # Ensure entry file is visible to the shell script
           export ENTRY_FILE=index.js
       
+      - name: Manual JS Bundle Generation
+        run: |
+          mkdir -p ios/main.jsbundle
+          export NODE_BINARY=$(which node)
+          
+          # Generate the bundle manually to bypass Xcode script issues
+          npx react-native bundle \
+            --platform ios \
+            --dev false \
+            --entry-file index.js \
+            --bundle-output ios/main.jsbundle \
+            --assets-dest ios
+      
       - name: Build Unsigned Archive
         run: |
           WORKSPACE_PATH=$(find . -name "*.xcworkspace" | head -1)
@@ -113,7 +123,8 @@ jobs:
             COMPILER_INDEX_STORE_ENABLE=NO \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
             NODE_BINARY="$NODE_BINARY" \
-            VFS_SKIP_ZIP_EXISTS_CHECK=YES
+            VFS_SKIP_ZIP_EXISTS_CHECK=YES \
+            SKIP_BUNDLING=1
       
       - name: Package into IPA
         run: |
