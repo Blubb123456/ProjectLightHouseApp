@@ -30,41 +30,34 @@ jobs:
           path = 'Podfile'
           content = File.read(path)
           
-          # 1. Force deterministic UUIDs off for Xcode 16 compatibility
           unless content.include?('deterministic_uuids')
             content = "install! 'cocoapods', :deterministic_uuids => false\n" + content
           end
           
           flags_code = <<-RUBY
           post_install do |installer|
-          # 2. Project-level override to kill sandboxing globally
+          # 1. Kill Sandboxing at the Project Level (Crucial for RN Bundle Script)
           installer.pods_project.build_configurations.each do |config|
           config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-          config.build_settings['CLANG_ENABLE_EXPLICIT_MODULES'] = 'NO'
           end
 
           installer.pods_project.targets.each do |target|
           target.build_configurations.each do |config|
-          # Force modern deployment to stop legacy compiler errors
+          # Force modern deployment for Xcode 16.4 compatibility
           config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
       
-          # Kill the Preview/Optimization conflict (-O vs -Onone)
+           # Stop the "Disabling Previews" conflict by killing Previews entirely
           config.build_settings['ENABLE_PREVIEWS'] = 'NO'
       
-          # Identify core C++/Obj-C targets
-          core_libs = ['React', 'hermes', 'RCT', 'Expo', 'DoubleConversion', 'fmt', 'glog', 'boost']
-          is_core = core_libs.any? { |lib| target.name.include?(lib) }
-
-          if is_core
+          # Core C++/Hermes targets must NOT have Swift flags
+          if ['React', 'hermes', 'RCT', 'Expo', 'DoubleConversion'].any? { |lib| target.name.include?(lib) }
           config.build_settings.delete('SWIFT_VERSION')
           config.build_settings.delete('SWIFT_OPTIMIZATION_LEVEL')
           else
           config.build_settings['SWIFT_VERSION'] = '5.0'
           end
 
-          # Required CI Flags for Xcode 16
           config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-          config.build_settings['SWIFT_COMPILATION_MODE'] = 'wholemodule'
           config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
           end
           end
@@ -88,7 +81,14 @@ jobs:
           # Force the Node path so Hermes and TensorFlow can find it
           echo "export NODE_BINARY=$(which node)" > .xcode.env
           echo "export NODE_BINARY=$(which node)" > ios/.xcode.env
-     
+
+      - name: Fix React Native Bundle Path
+        run: |
+          mkdir -p ios/build
+          ln -s $(which node) /usr/local/bin/node || true
+          # Ensure entry file is visible to the shell script
+          export ENTRY_FILE=index.js
+      
       - name: Build Unsigned Archive
         run: |
           WORKSPACE_PATH=$(find . -name "*.xcworkspace" | head -1)
@@ -112,7 +112,8 @@ jobs:
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
             COMPILER_INDEX_STORE_ENABLE=NO \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
-            NODE_BINARY="$NODE_BINARY"
+            NODE_BINARY="$NODE_BINARY" \
+            VFS_SKIP_ZIP_EXISTS_CHECK=YES
       
       - name: Package into IPA
         run: |
