@@ -21,23 +21,21 @@ jobs:
       - name: Generate iOS Folder (Prebuild)
         run: npx expo prebuild --platform ios --clean --no-install
 
-      - name: Surgical Podfile Patch
+      - name: Patch Podfile and Disable Bundle Script
         run: |
           cd ios
-          # Ensure xcodeproj gem is available for the script
-          gem install xcodeproj
-          cat <<-'EOF' > patch_script.rb
-          require 'xcodeproj'
+          # 1. Global settings for Xcode 16 and skipping Metro
+          cat <<-'EOF' > pod_patch.rb
           path = 'Podfile'
           content = File.read(path)
-          unless content.include?('deterministic_uuids')
-            content = "install! 'cocoapods', :deterministic_uuids => false\n" + content
-          end
-          flags_code = <<-RUBY
+          content = "install! 'cocoapods', :deterministic_uuids => false\n" + content
+          
+          footer = <<-RUBY
           post_install do |installer|
           installer.pods_project.build_configurations.each do |config|
           config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
           config.build_settings['ENABLE_PREVIEWS'] = 'NO'
+          config.build_settings['SKIP_BUNDLING'] = 'YES'
           end
           installer.pods_project.targets.each do |target|
           target.build_configurations.each do |config|
@@ -46,37 +44,33 @@ jobs:
           config.build_settings.delete('SWIFT_OPTIMIZATION_LEVEL')
           end
           end
-          # This targets the actual Project file to disable the script phase
-          main_project_path = installer.aggregate_targets.first.user_project_path
-          project = Xcodeproj::Project.open(main_project_path)
-          project.targets.each do |target|
-          target.shell_script_build_phases.each do |phase|
-          if phase.name =~ /Bundle React Native code/
-          phase.shell_script = "echo 'Manual Bundle detected - skipping'"
-          end
-          end
-          end
-          project.save
           end
           RUBY
+          # Clear old post_install and append new one
           content = content.gsub(/post_install do.*?end/m, '')
-          File.write(path, content + "\n" + flags_code)
+          File.write(path, content + "\n" + footer)
           EOF
-          ruby patch_script.rb
+          ruby pod_patch.rb
 
       - name: Install Pods
         run: |
           cd ios
           pod install
-
+      
+      - name: Hard-Disable Xcode Bundle Script
+        run: |
+          # This finds the 'Bundle React Native code' script inside the pbxproj 
+          # and replaces the execution call with a no-op 'exit 0'
+          find ios/*.xcodeproj/project.pbxproj -type f -exec sed -i '' 's/..\/node_modules\/react-native\/scripts\/react-native-xcode.sh/exit 0/g' {} +
+      
       - name: Manual JS Bundle Generation
         run: |
-          # Clean and prep
-          rm -rf ios/main.jsbundle
-          # Install the 'glue' modules that Metro keeps crying about
+          # Install only the bare essentials needed for the bundler to resolve the graph
           npm install @expo/metro-config @react-native/metro-config @tensorflow/tfjs @tensorflow/tfjs-react-native expo-file-system expo-image-picker --save-dev
           
+          rm -rf ios/main.jsbundle
           export NODE_BINARY=$(which node)
+          
           npx react-native bundle \
             --platform ios \
             --dev false \
@@ -101,9 +95,9 @@ jobs:
             -jobs 3 \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            AD_HOC_CODE_SIGNING_ALLOWED=YES \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
-            SKIP_BUNDLING=YES
+            SKIP_BUNDLING=YES \
+            FORCE_BUNDLING=NO
       
       - name: Package into IPA
         run: |
