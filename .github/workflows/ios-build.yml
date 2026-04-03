@@ -88,10 +88,13 @@ jobs:
       
       - name: Manual JS Bundle Generation
         run: |
-          mkdir -p ios/main.jsbundle
-          export NODE_BINARY=$(which node)
+          # Remove any accidentally created directory from the previous run
+          rm -rf ios/main.jsbundle
           
-          # Generate the bundle manually to bypass Xcode script issues
+          # Just ensure the parent directory exists
+          mkdir -p ios
+          
+          # Generate the bundle
           npx react-native bundle \
             --platform ios \
             --dev false \
