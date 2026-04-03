@@ -94,7 +94,7 @@ jobs:
             -archivePath build/ProjectLighthouse.xcarchive \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
-            -parallelizeTargets NO \
+            
             -jobs 1 \
             SKIP_INSTALL=NO \
             CODE_SIGNING_ALLOWED=NO \
