@@ -30,7 +30,7 @@ jobs:
           path = 'Podfile'
           content = File.read(path)
           
-          # 1. Xcode 16 Deterministic UUID Fix
+          # 1. Standard CocoaPods fix for Xcode 16
           unless content.include?('deterministic_uuids')
             content = "install! 'cocoapods', :deterministic_uuids => false\n" + content
           end
@@ -38,34 +38,32 @@ jobs:
           flags_code = <<-RUBY
           post_install do |installer|
           installer.pods_project.targets.each do |target|
-          # Check if the target actually uses Swift
-          has_swift = target.source_build_phase.files.any? { |f| f.file_ref.path&.end_with?('.swift') }
-    
           target.build_configurations.each do |config|
-          # Fix Deployment Targets (Resolves the 4.3/8.0 warnings)
-          config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
       
-          #  FIX: Only set SWIFT_VERSION if the target actually has Swift files
-          # This stops the "Disabling previews" loop for C++/Obj-C core targets
-          if has_swift || target.name == 'ProjectLightHouseReactApp'
-          config.build_settings['SWIFT_VERSION'] = '5.0'
-          else
+          # Force a modern deployment target to stop Xcode 16 from complaining about iOS 4.3/8.0
+          config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+
+          # Identify Core C++ / Obj-C targets that should NEVER have Swift flags
+          core_libs = ['React', 'hermes', 'RCT', 'Expo', 'DoubleConversion', 'fmt', 'glog', 'boost', 'fast_float']
+          is_core = core_libs.any? { |lib| target.name.include?(lib) }
+
+          if is_core
           config.build_settings.delete('SWIFT_VERSION')
           config.build_settings.delete('SWIFT_OPTIMIZATION_LEVEL')
+          else
+          # Only set for your app and actual Swift logic pods
+          config.build_settings['SWIFT_VERSION'] = '5.0'
           end
 
-          # Force C++ standard for the Hermes/Core errors seen previously
-          config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++20'
-      
-          # Mandatory CI Flags
+          # Required CI fixes
           config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-          config.build_settings['ENABLE_PREVIEWS'] = 'NO'
+          config.build_settings['CLANG_ENABLE_EXPLICIT_MODULES'] = 'NO'
           config.build_settings['SWIFT_COMPILATION_MODE'] = 'wholemodule'
           end
           end
           end
           RUBY
-          # Remove any existing post_install to avoid duplicates
+          # Clean up previous attempts at post_install
           content = content.gsub(/post_install do.*?end/m, '')
           File.write(path, content + "\n" + flags_code)
           EOF
@@ -99,7 +97,7 @@ jobs:
             -archivePath build/ProjectLighthouse.xcarchive \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
-            -jobs 4 \
+            -jobs 3 \
             -derivedDataPath build/DerivedData \
             SKIP_INSTALL=NO \
             CODE_SIGNING_ALLOWED=NO \
