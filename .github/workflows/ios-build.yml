@@ -88,13 +88,14 @@ jobs:
       
       - name: Manual JS Bundle Generation
         run: |
-          # Remove any accidentally created directory from the previous run
-          rm -rf ios/main.jsbundle
+          # 1. Force install the missing config package so npx doesn't fail
+          npm install @react-native/metro-config --save-dev
           
-          # Just ensure the parent directory exists
+          # 2. Clean up any previous folder-named-file mistakes
+          rm -rf ios/main.jsbundle
           mkdir -p ios
           
-          # Generate the bundle
+          # 3. Generate the actual bundle file
           npx react-native bundle \
             --platform ios \
             --dev false \
