@@ -88,18 +88,16 @@ jobs:
       
       - name: Manual JS Bundle Generation
         run: |
-          # 1. Install Metro config and TensorFlow dependencies
-          # We include tfjs and tfjs-react-native to ensure the linker finds them
-          npm install @react-native/metro-config @tensorflow/tfjs @tensorflow/tfjs-react-native --save-dev
+          # 1. Install every missing link in the config chain
+          npm install @expo/metro-config @react-native/metro-config @tensorflow/tfjs @tensorflow/tfjs-react-native --save-dev
           
-          # 2. Standard cleanup
+          # 2. Safety cleanup
           rm -rf ios/main.jsbundle
           mkdir -p ios
           
           export NODE_BINARY=$(which node)
           
-          # 3. Generate the bundle
-          # We add --reset-cache to ensure Metro doesn't use a stale dependency graph
+          # 3. Generate the bundle with the --reset-cache flag
           npx react-native bundle \
             --platform ios \
             --dev false \
