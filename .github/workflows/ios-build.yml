@@ -56,6 +56,39 @@ jobs:
         run: |
           cd ios
           pod install
+
+      - name: Physically Delete Bundle Build Phase
+        shell: python3 {0}
+        run: |
+          import os
+          import re
+
+          # 1. Locate the project file
+          proj_path = None
+          for root, dirs, files in os.walk('ios'):
+              if root.endswith('.xcodeproj'):
+                  proj_path = os.path.join(root, 'project.pbxproj')
+                  break
+
+          if not proj_path:
+              print("Could not find xcodeproj file.")
+              exit(1)
+
+          print(f"Found project at {proj_path}")
+          with open(proj_path, 'r') as f:
+              content = f.read()
+
+          # 2. Identify the 'Bundle React Native code and images' phase block
+          # This regex finds the start of the phase and captures until the closing brace
+          pattern = re.compile(r'/[*] Bundle React Native code and images [*]/ = \{.*?shellScript = ".*?";.*?\}', re.DOTALL)
+          
+          if pattern.search(content):
+              new_content = re.sub(pattern, '/* Nuked Bundle Phase */ = { isa = PBXShellScriptBuildPhase; buildActionMask = 2147483647; files = (); name = "Bundle React Native code and images"; runOnlyForDeploymentPostprocessing = 0; shellPath = /bin/sh; shellScript = "echo skipping"; }', content)
+              with open(proj_path, 'w') as f:
+                  f.write(new_content)
+              print("Successfully neutralized the Bundle Build Phase.")
+          else:
+              print("Bundle Phase not found or already removed.")
       
       - name: Hard-Disable Xcode Bundle Script
         run: |
@@ -101,16 +134,14 @@ jobs:
       
       - name: Manual JS Bundle Generation
         run: |
-          # Install the specific cluster of modules TensorFlow needs to resolve its graph
+          # Install the specific modules the Metro graph needs to resolve
           npm install @expo/metro-config @react-native/metro-config @tensorflow/tfjs @tensorflow/tfjs-react-native expo-asset expo-file-system expo-constants expo-image-picker --save-dev
           
-          # Clean up any previous attempts
           rm -rf ios/main.jsbundle
           mkdir -p ios
           
           export NODE_BINARY=$(which node)
           
-          # Generate the bundle
           npx react-native bundle \
             --platform ios \
             --dev false \
