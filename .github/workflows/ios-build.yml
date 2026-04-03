@@ -19,33 +19,26 @@ jobs:
         run: npm install
 
       - name: Generate iOS Folder (Prebuild)
-        run: |
-          rm -rf ios
-          npx expo prebuild --platform ios --clean --no-install
+        run: npx expo prebuild --platform ios --clean --no-install
 
       - name: Surgical Podfile Patch
         run: |
           cd ios
+          # Ensure xcodeproj gem is available for the script
+          gem install xcodeproj
           cat <<-'EOF' > patch_script.rb
           require 'xcodeproj'
           path = 'Podfile'
           content = File.read(path)
-          
-          # Force deterministic UUIDs off for Xcode 16
           unless content.include?('deterministic_uuids')
             content = "install! 'cocoapods', :deterministic_uuids => false\n" + content
           end
-          
           flags_code = <<-RUBY
           post_install do |installer|
-          # 1. Kill Sandboxing and Previews globally
           installer.pods_project.build_configurations.each do |config|
           config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
           config.build_settings['ENABLE_PREVIEWS'] = 'NO'
-          config.build_settings['SKIP_BUNDLING'] = 'YES'
           end
-
-          # 2. Strip Swift flags from ALL pods to stop the preview loop
           installer.pods_project.targets.each do |target|
           target.build_configurations.each do |config|
           config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
@@ -53,16 +46,13 @@ jobs:
           config.build_settings.delete('SWIFT_OPTIMIZATION_LEVEL')
           end
           end
-
-          # 3. THE NUKE: Find the main app project and empty the Bundle script
-          # This prevents Code 65 by ensuring the script does literally nothing.
+          # This targets the actual Project file to disable the script phase
           main_project_path = installer.aggregate_targets.first.user_project_path
           project = Xcodeproj::Project.open(main_project_path)
           project.targets.each do |target|
           target.shell_script_build_phases.each do |phase|
           if phase.name =~ /Bundle React Native code/
-          puts "Nuking Bundle Script for \#{target.name}"
-          phase.shell_script = "echo 'Skipping Bundle phase - Manual Bundle detected'"
+          phase.shell_script = "echo 'Manual Bundle detected - skipping'"
           end
           end
           end
@@ -73,45 +63,20 @@ jobs:
           File.write(path, content + "\n" + flags_code)
           EOF
           ruby patch_script.rb
-          
 
       - name: Install Pods
         run: |
           cd ios
           pod install
 
-      - name: Fix React Native Path for Xcode
-        run: |
-          mkdir -p ios/scripts
-          ln -s $(pwd)/node_modules/react-native/scripts/xcode ios/scripts/xcode
-          # Force the Node path so Hermes and TensorFlow can find it
-          echo "export NODE_BINARY=$(which node)" > .xcode.env
-          echo "export NODE_BINARY=$(which node)" > ios/.xcode.env
-
-      - name: Fix React Native Bundle Path
-        run: |
-          mkdir -p ios/build
-          ln -s $(which node) /usr/local/bin/node || true
-          # Ensure entry file is visible to the shell script
-          export ENTRY_FILE=index.js
-      
       - name: Manual JS Bundle Generation
         run: |
-          # 1. Install all missing core and expo dependencies for the bundler
-          npm install @expo/metro-config @react-native/metro-config @tensorflow/tfjs @tensorflow/tfjs-react-native expo-file-system expo-image-picker expo-asset expo-constants --save-dev
-          
-          # 2. Fix the "server.tls" warning (Removes the deprecated flag from the temporary config)
-          if [ -f metro.config.js ]; then
-            sed -i '' 's/tls: false//g' metro.config.js || true
-          fi
-
-          # 3. Clean up and generate
+          # Clean and prep
           rm -rf ios/main.jsbundle
-          mkdir -p ios
+          # Install the 'glue' modules that Metro keeps crying about
+          npm install @expo/metro-config @react-native/metro-config @tensorflow/tfjs @tensorflow/tfjs-react-native expo-file-system expo-image-picker --save-dev
           
           export NODE_BINARY=$(which node)
-          
-          # 4. Generate the bundle with --reset-cache to ignore previous failures
           npx react-native bundle \
             --platform ios \
             --dev false \
@@ -119,14 +84,11 @@ jobs:
             --bundle-output ios/main.jsbundle \
             --assets-dest ios \
             --reset-cache
-      
+
       - name: Build Unsigned Archive
         run: |
           WORKSPACE_PATH=$(find . -name "*.xcworkspace" | head -1)
           SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
-          # Force the Node path for the build shell
-          export SKIP_BUNDLING=1
-          export FORCE_BUNDLING=0
           export NODE_BINARY=$(which node)
           
           xcodebuild archive \
@@ -137,18 +99,11 @@ jobs:
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -jobs 3 \
-            -derivedDataPath build/DerivedData \
-            SKIP_INSTALL=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
-            COMPILER_INDEX_STORE_ENABLE=NO \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
-            VFS_SKIP_ZIP_EXISTS_CHECK=YES \
-            OTHER_SWIFT_FLAGS="-DNDEBUG" \
-            NODE_BINARY="$NODE_BINARY" \
-            SKIP_BUNDLING=YES 
+            SKIP_BUNDLING=YES
       
       - name: Package into IPA
         run: |
