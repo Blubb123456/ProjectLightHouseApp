@@ -39,18 +39,23 @@ jobs:
           # 1. Disable Sandboxing for the entire Project
           installer.pods_project.build_configurations.each do |config|
           config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-          config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+          
+          # Force the skip flag into the project-level build settings
+          config.build_settings['SKIP_BUNDLING'] = 'YES'
           end
 
           installer.pods_project.targets.each do |target|
           target.build_configurations.each do |config|
           # 2. Kill the "Disabling Previews" conflict at the source
           config.build_settings['ENABLE_PREVIEWS'] = 'NO'
+          config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
           config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-O'
       
-          # 3. Strip Swift flags from non-Swift core targets
-          if ['React', 'hermes', 'RCT', 'Expo', 'DoubleConversion', 'glog'].any? { |lib| target.name.include?(lib) }
+          # List of targets that are strictly C/C++/Obj-C and must NOT have Swift optimization conflicts
+          non_swift_libs = ['React', 'hermes', 'RCT', 'Expo', 'SocketRocket', 'DoubleConversion']
+          if non_swift_libs.any? { |lib| target.name.include?(lib) }
           config.build_settings.delete('SWIFT_VERSION')
+          config.build_settings.delete('SWIFT_OPTIMIZATION_LEVEL')
           else
           config.build_settings['SWIFT_VERSION'] = '5.0'
           end
@@ -136,7 +141,8 @@ jobs:
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
             NODE_BINARY="$NODE_BINARY" \
             VFS_SKIP_ZIP_EXISTS_CHECK=YES \
-            SKIP_BUNDLING=1
+            SKIP_BUNDLING=1 \
+            FORCE_BUNDLING=NO
       
       - name: Package into IPA
         run: |
