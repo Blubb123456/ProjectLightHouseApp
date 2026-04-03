@@ -27,36 +27,46 @@ jobs:
         run: |
           cd ios
           cat <<-'EOF' > patch_script.rb
+          require 'xcodeproj'
           path = 'Podfile'
           content = File.read(path)
           
+          # Force deterministic UUIDs off for Xcode 16
           unless content.include?('deterministic_uuids')
             content = "install! 'cocoapods', :deterministic_uuids => false\n" + content
           end
           
           flags_code = <<-RUBY
           post_install do |installer|
+          # 1. Kill Sandboxing and Previews globally
           installer.pods_project.build_configurations.each do |config|
           config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-          # Global flag inside the project to stop Metro triggers
+          config.build_settings['ENABLE_PREVIEWS'] = 'NO'
           config.build_settings['SKIP_BUNDLING'] = 'YES'
           end
 
+          # 2. Strip Swift flags from ALL pods to stop the preview loop
           installer.pods_project.targets.each do |target|
           target.build_configurations.each do |config|
           config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-          config.build_settings['ENABLE_PREVIEWS'] = 'NO'
-      
-          # UNIVERAL FIX: If the target name is not your Main App, 
-          # strip SWIFT_VERSION to stop the preview/optimization loop.
-          unless target.name == 'ProjectLightHouseReactApp'
           config.build_settings.delete('SWIFT_VERSION')
           config.build_settings.delete('SWIFT_OPTIMIZATION_LEVEL')
           end
+          end
 
-          config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+          # 3. THE NUKE: Find the main app project and empty the Bundle script
+          # This prevents Code 65 by ensuring the script does literally nothing.
+          main_project_path = installer.aggregate_targets.first.user_project_path
+          project = Xcodeproj::Project.open(main_project_path)
+          project.targets.each do |target|
+          target.shell_script_build_phases.each do |phase|
+          if phase.name =~ /Bundle React Native code/
+          puts "Nuking Bundle Script for \#{target.name}"
+          phase.shell_script = "echo 'Skipping Bundle phase - Manual Bundle detected'"
           end
           end
+          end
+          project.save
           end
           RUBY
           content = content.gsub(/post_install do.*?end/m, '')
@@ -136,7 +146,9 @@ jobs:
             COMPILER_INDEX_STORE_ENABLE=NO \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
             VFS_SKIP_ZIP_EXISTS_CHECK=YES \
-            OTHER_SWIFT_FLAGS="-DNDEBUG"
+            OTHER_SWIFT_FLAGS="-DNDEBUG" \
+            NODE_BINARY="$NODE_BINARY" \
+            SKIP_BUNDLING=YES 
       
       - name: Package into IPA
         run: |
