@@ -88,16 +88,21 @@ jobs:
       
       - name: Manual JS Bundle Generation
         run: |
-          # 1. Install every missing link in the config chain
-          npm install @expo/metro-config @react-native/metro-config @tensorflow/tfjs @tensorflow/tfjs-react-native --save-dev
+          # 1. Install all missing core and expo dependencies for the bundler
+          npm install @expo/metro-config @react-native/metro-config @tensorflow/tfjs @tensorflow/tfjs-react-native expo-file-system expo-image-picker expo-asset expo-constants --save-dev
           
-          # 2. Safety cleanup
+          # 2. Fix the "server.tls" warning (Removes the deprecated flag from the temporary config)
+          if [ -f metro.config.js ]; then
+            sed -i '' 's/tls: false//g' metro.config.js || true
+          fi
+
+          # 3. Clean up and generate
           rm -rf ios/main.jsbundle
           mkdir -p ios
           
           export NODE_BINARY=$(which node)
           
-          # 3. Generate the bundle with the --reset-cache flag
+          # 4. Generate the bundle with --reset-cache to ignore previous failures
           npx react-native bundle \
             --platform ios \
             --dev false \
