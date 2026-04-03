@@ -30,40 +30,46 @@ jobs:
           path = 'Podfile'
           content = File.read(path)
           
-          # 1. Standard CocoaPods fix for Xcode 16
+          # 1. Force deterministic UUIDs off for Xcode 16 compatibility
           unless content.include?('deterministic_uuids')
             content = "install! 'cocoapods', :deterministic_uuids => false\n" + content
           end
           
           flags_code = <<-RUBY
           post_install do |installer|
+          # 2. Project-level override to kill sandboxing globally
+          installer.pods_project.build_configurations.each do |config|
+          config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+          config.build_settings['CLANG_ENABLE_EXPLICIT_MODULES'] = 'NO'
+          end
+
           installer.pods_project.targets.each do |target|
           target.build_configurations.each do |config|
-      
-          # Force a modern deployment target to stop Xcode 16 from complaining about iOS 4.3/8.0
+          # Force modern deployment to stop legacy compiler errors
           config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-
-          # Identify Core C++ / Obj-C targets that should NEVER have Swift flags
-          core_libs = ['React', 'hermes', 'RCT', 'Expo', 'DoubleConversion', 'fmt', 'glog', 'boost', 'fast_float']
+      
+          # Kill the Preview/Optimization conflict (-O vs -Onone)
+          config.build_settings['ENABLE_PREVIEWS'] = 'NO'
+      
+          # Identify core C++/Obj-C targets
+          core_libs = ['React', 'hermes', 'RCT', 'Expo', 'DoubleConversion', 'fmt', 'glog', 'boost']
           is_core = core_libs.any? { |lib| target.name.include?(lib) }
 
           if is_core
           config.build_settings.delete('SWIFT_VERSION')
           config.build_settings.delete('SWIFT_OPTIMIZATION_LEVEL')
           else
-          # Only set for your app and actual Swift logic pods
           config.build_settings['SWIFT_VERSION'] = '5.0'
           end
 
-          # Required CI fixes
+          # Required CI Flags for Xcode 16
           config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-          config.build_settings['CLANG_ENABLE_EXPLICIT_MODULES'] = 'NO'
           config.build_settings['SWIFT_COMPILATION_MODE'] = 'wholemodule'
+          config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
           end
           end
           end
           RUBY
-          # Clean up previous attempts at post_install
           content = content.gsub(/post_install do.*?end/m, '')
           File.write(path, content + "\n" + flags_code)
           EOF
@@ -105,7 +111,8 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
             COMPILER_INDEX_STORE_ENABLE=NO \
-            ENABLE_USER_SCRIPT_SANDBOXING=NO
+            ENABLE_USER_SCRIPT_SANDBOXING=NO \
+            NODE_BINARY="$NODE_BINARY"
       
       - name: Package into IPA
         run: |
