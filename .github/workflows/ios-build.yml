@@ -201,7 +201,7 @@ jobs:
             SKIP_BUNDLING=YES \
             FORCE_BUNDLING=NO \
             VFS_SKIP_ZIP_EXISTS_CHECK=YES \
-            -parallelizeTargets NO \
+            -parallelizeTargets=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
             CLANG_ENABLE_MODULE_DEBUGGING=NO
       
