@@ -36,28 +36,22 @@ jobs:
           
           flags_code = <<-RUBY
           post_install do |installer|
-          # 1. Disable Sandboxing for the entire Project
           installer.pods_project.build_configurations.each do |config|
           config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-          
-          # Force the skip flag into the project-level build settings
+          # Global flag inside the project to stop Metro triggers
           config.build_settings['SKIP_BUNDLING'] = 'YES'
           end
 
           installer.pods_project.targets.each do |target|
           target.build_configurations.each do |config|
-          # 2. Kill the "Disabling Previews" conflict at the source
-          config.build_settings['ENABLE_PREVIEWS'] = 'NO'
           config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-          config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-O'
+          config.build_settings['ENABLE_PREVIEWS'] = 'NO'
       
-          # List of targets that are strictly C/C++/Obj-C and must NOT have Swift optimization conflicts
-          non_swift_libs = ['React', 'hermes', 'RCT', 'Expo', 'SocketRocket', 'DoubleConversion']
-          if non_swift_libs.any? { |lib| target.name.include?(lib) }
+          # UNIVERAL FIX: If the target name is not your Main App, 
+          # strip SWIFT_VERSION to stop the preview/optimization loop.
+          unless target.name == 'ProjectLightHouseReactApp'
           config.build_settings.delete('SWIFT_VERSION')
           config.build_settings.delete('SWIFT_OPTIMIZATION_LEVEL')
-          else
-          config.build_settings['SWIFT_VERSION'] = '5.0'
           end
 
           config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
@@ -121,6 +115,8 @@ jobs:
           WORKSPACE_PATH=$(find . -name "*.xcworkspace" | head -1)
           SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
           # Force the Node path for the build shell
+          export SKIP_BUNDLING=1
+          export FORCE_BUNDLING=0
           export NODE_BINARY=$(which node)
           
           xcodebuild archive \
@@ -139,10 +135,8 @@ jobs:
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
             COMPILER_INDEX_STORE_ENABLE=NO \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
-            NODE_BINARY="$NODE_BINARY" \
             VFS_SKIP_ZIP_EXISTS_CHECK=YES \
-            SKIP_BUNDLING=1 \
-            FORCE_BUNDLING=NO
+            OTHER_SWIFT_FLAGS="-DNDEBUG"
       
       - name: Package into IPA
         run: |
