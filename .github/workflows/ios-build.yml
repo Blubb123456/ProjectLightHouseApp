@@ -68,6 +68,37 @@ jobs:
           # Target the specific shell script call inside the project file and neutralize it
           find ios/*.xcodeproj/project.pbxproj -type f -exec sed -i '' 's/..\/node_modules\/react-native\/scripts\/react-native-xcode.sh/echo "Skipping internal bundle"/g' {} +
       
+      - name: Physically Delete Bundle Build Phase
+        shell: python3 {0}
+        run: |
+          import os
+          import re
+
+          proj_path = None
+          for root, dirs, files in os.walk('ios'):
+              if root.endswith('.xcodeproj'):
+                  proj_path = os.path.join(root, 'project.pbxproj')
+                  break
+
+          if proj_path:
+              print(f"Found project at {proj_path}")
+              with open(proj_path, 'r') as f:
+                  content = f.read()
+
+              # This regex identifies the entire 'Bundle React Native code and images' 
+              # build phase block and replaces it with an empty string.
+              pattern = re.compile(r'/[*][^*]*Bundle React Native code and images[*]/.*?;', re.DOTALL)
+              new_content = re.sub(pattern, '', content)
+              
+              # Also kill the shell script content specifically just in case
+              new_content = new_content.replace('react-native-xcode.sh', 'echo skipping')
+
+              with open(proj_path, 'w') as f:
+                  f.write(new_content)
+              print("Successfully purged Bundle Build Phase.")
+          else:
+              print("Could not find xcodeproj file.")
+      
       - name: Manual JS Bundle Generation
         run: |
           # Install the specific cluster of modules TensorFlow needs to resolve its graph
@@ -92,6 +123,7 @@ jobs:
         run: |
           WORKSPACE_PATH=$(find . -name "*.xcworkspace" | head -1)
           SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
+          export SKIP_BUNDLING=1
           export NODE_BINARY=$(which node)
           
           xcodebuild archive \
