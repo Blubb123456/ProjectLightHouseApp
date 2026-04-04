@@ -28,28 +28,36 @@ jobs:
           cat <<-'EOF' > pod_patch.rb
           path = 'Podfile'
           content = File.read(path)
-          content = "install! 'cocoapods', :deterministic_uuids => false\n" + content
           
+          # 1. Force the deterministic UUIDs fix for Xcode 16
+          unless content.include?('deterministic_uuids')
+            content = "install! 'cocoapods', :deterministic_uuids => false\n" + content
+          end
+          
+          # 2. Define the new Enforcement Hook
           footer = <<-RUBY
           post_install do |installer|
-          installer.pods_project.build_configurations.each do |config|
-          config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-          config.build_settings['ENABLE_PREVIEWS'] = 'NO'
-          config.build_settings['SKIP_BUNDLING'] = 'YES'
-          end
           installer.pods_project.targets.each do |target|
           target.build_configurations.each do |config|
+          # Force Deployment Target to stop range warnings
           config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-          config.build_settings.delete('SWIFT_VERSION')
+      
+          # Kill the Swift Optimization Conflict (The 'Note' loop fix)
           config.build_settings.delete('SWIFT_OPTIMIZATION_LEVEL')
+          config.build_settings.delete('SWIFT_VERSION')
+      
+          # Disable Sandboxing and Previews for CI
+           config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+          config.build_settings['ENABLE_PREVIEWS'] = 'NO'
           end
           end
           end
           RUBY
-          # Clear old post_install and append new one
+          # 3. Wipe any existing post_install and append the fresh one
           content = content.gsub(/post_install do.*?end/m, '')
           File.write(path, content + "\n" + footer)
           EOF
+          # Run the ruby script to actually modify the file
           ruby pod_patch.rb
 
       - name: Install Pods
@@ -57,6 +65,27 @@ jobs:
           cd ios
           pod install
 
+      - name: Surgical Build Phase Removal
+        shell: python3 {0}
+        run: |
+          import os
+          proj_path = next((os.path.join(root, 'project.pbxproj') for root, _, files in os.walk('ios') if root.endswith('.xcodeproj')), None)
+          if proj_path:
+              with open(proj_path, 'r') as f:
+                  lines = f.readlines()
+              with open(proj_path, 'w') as f:
+                  skip = False
+                  for line in lines:
+                      if 'Bundle React Native code and images' in line and 'isa = PBXShellScriptBuildPhase' in line:
+                          skip = True
+                      if skip and '};' in line:
+                          f.write('/* Nuked Phase */\n')
+                          skip = False
+                          continue
+                      if not skip:
+                          f.write(line)
+              print("Successfully purged the bundle phase.")
+      
       - name: Physically Delete Bundle Build Phase
         shell: python3 {0}
         run: |
@@ -201,7 +230,7 @@ jobs:
             SKIP_BUNDLING=YES \
             FORCE_BUNDLING=NO \
             VFS_SKIP_ZIP_EXISTS_CHECK=YES \
-            -parallelizeTargets=NO \
+            
             COMPILER_INDEX_STORE_ENABLE=NO \
             CLANG_ENABLE_MODULE_DEBUGGING=NO
       
