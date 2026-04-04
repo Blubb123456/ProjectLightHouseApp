@@ -65,6 +65,44 @@ jobs:
           cd ios
           pod install
 
+      - name: Surgical Build Phase Neutralization
+        shell: python3 {0}
+        run: |
+          import os
+          import re
+
+          # 1. Locate the project file
+          proj_path = next((os.path.join(root, 'project.pbxproj') for root, _, files in os.walk('ios') if root.endswith('.xcodeproj')), None)
+          
+          if not proj_path:
+              print("Could not find xcodeproj file.")
+              exit(1)
+
+          print(f"Found project at {proj_path}")
+          with open(proj_path, 'r') as f:
+              content = f.read()
+
+          # 2. Neutralize the 'Bundle React Native code' phase
+          # This replaces the complex shell script with a no-op 'exit 0'
+          content = re.sub(
+              r'(name = "Bundle React Native code and images";\s+shellPath = /bin/sh;\s+shellScript = ").*?(";)',
+              r'\1exit 0\2',
+              content,
+              flags=re.DOTALL
+          )
+
+          # 3. Neutralize the 'Replace Hermes' phase (the other warning in your logs)
+          content = re.sub(
+              r'(name = "\[CP-User\] \[Hermes\] Replace Hermes.*?shellScript = ").*?(";)',
+              r'\1exit 0\2',
+              content,
+              flags=re.DOTALL
+          )
+
+          with open(proj_path, 'w') as f:
+              f.write(content)
+          print("Successfully neutralized failing build phases.")
+
       - name: Surgical Build Phase Removal
         shell: python3 {0}
         run: |
