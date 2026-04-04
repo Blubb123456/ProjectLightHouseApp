@@ -69,22 +69,36 @@ jobs:
         shell: python3 {0}
         run: |
           import os
+          import re
+
+          # Find the pbxproj file
           proj_path = next((os.path.join(root, 'project.pbxproj') for root, _, files in os.walk('ios') if root.endswith('.xcodeproj')), None)
+          
           if proj_path:
+              print(f"Purging build phases in {proj_path}")
               with open(proj_path, 'r') as f:
-                  lines = f.readlines()
+                  content = f.read()
+
+              # 1. Neutralize the 'Bundle React Native code' phase
+              # We replace the shell script content with a simple 'exit 0'
+              content = re.sub(
+                  r'(name = "Bundle React Native code and images";\s+shellPath = /bin/sh;\s+shellScript = ").*?(";)',
+                  r'\1exit 0\2',
+                  content,
+                  flags=re.DOTALL
+              )
+
+              # 2. Neutralize the 'Replace Hermes' phase (the other warning in your logs)
+              content = re.sub(
+                  r'(name = "\[CP-User\] \[Hermes\] Replace Hermes.*?shellScript = ").*?(";)',
+                  r'\1exit 0\2',
+                  content,
+                  flags=re.DOTALL
+              )
+
               with open(proj_path, 'w') as f:
-                  skip = False
-                  for line in lines:
-                      if 'Bundle React Native code and images' in line and 'isa = PBXShellScriptBuildPhase' in line:
-                          skip = True
-                      if skip and '};' in line:
-                          f.write('/* Nuked Phase */\n')
-                          skip = False
-                          continue
-                      if not skip:
-                          f.write(line)
-              print("Successfully purged the bundle phase.")
+                  f.write(content)
+              print("Successfully neutralized failing build phases.")
       
       - name: Physically Delete Bundle Build Phase
         shell: python3 {0}
