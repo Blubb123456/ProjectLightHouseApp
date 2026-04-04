@@ -87,7 +87,7 @@ jobs:
                   flags=re.DOTALL
               )
 
-              # 2. Kill the Hermes config script (prevents Code 75)
+              # 2. Kill the Hermes config script (prevents background hangs)
               content = re.sub(
                   r'(name = "\[CP-User\] \[Hermes\] Replace Hermes.*?shellScript = ").*?(";)',
                   r'\1exit 0\2',
@@ -101,7 +101,7 @@ jobs:
 
       - name: Manual JS Bundle Generation
         run: |
-          # Crucial: Install dependencies that TensorFlow's bridge requires
+          # Install the specific modules the Metro graph needs to resolve
           npm install @expo/metro-config @react-native/metro-config @tensorflow/tfjs @tensorflow/tfjs-react-native expo-asset expo-file-system expo-constants expo-image-picker --save-dev
           
           rm -rf ios/main.jsbundle
