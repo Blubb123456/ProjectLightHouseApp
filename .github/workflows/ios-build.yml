@@ -65,60 +65,21 @@ jobs:
           cd ios
           pod install
 
-      - name: Surgical Build Phase Neutralization
+      # CONSOLIDATED NUKE STEP: This replaces the 5 redundant steps in your current YAML
+      - name: Neutralize Failing Build Phases
         shell: python3 {0}
         run: |
           import os
           import re
 
-          # 1. Locate the project file
-          proj_path = next((os.path.join(root, 'project.pbxproj') for root, _, files in os.walk('ios') if root.endswith('.xcodeproj')), None)
-          
-          if not proj_path:
-              print("Could not find xcodeproj file.")
-              exit(1)
-
-          print(f"Found project at {proj_path}")
-          with open(proj_path, 'r') as f:
-              content = f.read()
-
-          # 2. Neutralize the 'Bundle React Native code' phase
-          # This replaces the complex shell script with a no-op 'exit 0'
-          content = re.sub(
-              r'(name = "Bundle React Native code and images";\s+shellPath = /bin/sh;\s+shellScript = ").*?(";)',
-              r'\1exit 0\2',
-              content,
-              flags=re.DOTALL
-          )
-
-          # 3. Neutralize the 'Replace Hermes' phase (the other warning in your logs)
-          content = re.sub(
-              r'(name = "\[CP-User\] \[Hermes\] Replace Hermes.*?shellScript = ").*?(";)',
-              r'\1exit 0\2',
-              content,
-              flags=re.DOTALL
-          )
-
-          with open(proj_path, 'w') as f:
-              f.write(content)
-          print("Successfully neutralized failing build phases.")
-
-      - name: Surgical Build Phase Removal
-        shell: python3 {0}
-        run: |
-          import os
-          import re
-
-          # Find the pbxproj file
           proj_path = next((os.path.join(root, 'project.pbxproj') for root, _, files in os.walk('ios') if root.endswith('.xcodeproj')), None)
           
           if proj_path:
-              print(f"Purging build phases in {proj_path}")
+              print(f"Sanitizing {proj_path}")
               with open(proj_path, 'r') as f:
                   content = f.read()
 
-              # 1. Neutralize the 'Bundle React Native code' phase
-              # We replace the shell script content with a simple 'exit 0'
+              # 1. Kill the Bundle React Native script execution
               content = re.sub(
                   r'(name = "Bundle React Native code and images";\s+shellPath = /bin/sh;\s+shellScript = ").*?(";)',
                   r'\1exit 0\2',
@@ -126,7 +87,7 @@ jobs:
                   flags=re.DOTALL
               )
 
-              # 2. Neutralize the 'Replace Hermes' phase (the other warning in your logs)
+              # 2. Kill the Hermes config script (prevents Code 75)
               content = re.sub(
                   r'(name = "\[CP-User\] \[Hermes\] Replace Hermes.*?shellScript = ").*?(";)',
                   r'\1exit 0\2',
@@ -136,121 +97,15 @@ jobs:
 
               with open(proj_path, 'w') as f:
                   f.write(content)
-              print("Successfully neutralized failing build phases.")
-      
-      - name: Physically Delete Bundle Build Phase
-        shell: python3 {0}
-        run: |
-          import os
-          import re
+              print("Build phases neutralized.")
 
-          # 1. Locate the project file
-          proj_path = None
-          for root, dirs, files in os.walk('ios'):
-              if root.endswith('.xcodeproj'):
-                  proj_path = os.path.join(root, 'project.pbxproj')
-                  break
-
-          if not proj_path:
-              print("Could not find xcodeproj file.")
-              exit(1)
-
-          print(f"Found project at {proj_path}")
-          with open(proj_path, 'r') as f:
-              content = f.read()
-
-          # 2. Identify the 'Bundle React Native code and images' phase block
-          # This regex finds the start of the phase and captures until the closing brace
-          pattern = re.compile(r'/[*] Bundle React Native code and images [*]/ = \{.*?shellScript = ".*?";.*?\}', re.DOTALL)
-          
-          if pattern.search(content):
-              new_content = re.sub(pattern, '/* Nuked Bundle Phase */ = { isa = PBXShellScriptBuildPhase; buildActionMask = 2147483647; files = (); name = "Bundle React Native code and images"; runOnlyForDeploymentPostprocessing = 0; shellPath = /bin/sh; shellScript = "echo skipping"; }', content)
-              with open(proj_path, 'w') as f:
-                  f.write(new_content)
-              print("Successfully neutralized the Bundle Build Phase.")
-          else:
-              print("Bundle Phase not found or already removed.")
-      
-      - name: Hard-Disable Xcode Bundle Script
-        run: |
-          # This finds the 'Bundle React Native code' script inside the pbxproj 
-          # and replaces the execution call with a no-op 'exit 0'
-          find ios/*.xcodeproj/project.pbxproj -type f -exec sed -i '' 's/..\/node_modules\/react-native\/scripts\/react-native-xcode.sh/exit 0/g' {} +
-      
-      - name: Kill Xcode Bundle Script
-        run: |
-          # Target the specific shell script call inside the project file and neutralize it
-          find ios/*.xcodeproj/project.pbxproj -type f -exec sed -i '' 's/..\/node_modules\/react-native\/scripts\/react-native-xcode.sh/echo "Skipping internal bundle"/g' {} +
-      
-      - name: Physically Delete Bundle Build Phase
-        shell: python3 {0}
-        run: |
-          import os
-          import re
-
-          proj_path = None
-          for root, dirs, files in os.walk('ios'):
-              if root.endswith('.xcodeproj'):
-                  proj_path = os.path.join(root, 'project.pbxproj')
-                  break
-
-          if proj_path:
-              print(f"Found project at {proj_path}")
-              with open(proj_path, 'r') as f:
-                  content = f.read()
-
-              # This regex identifies the entire 'Bundle React Native code and images' 
-              # build phase block and replaces it with an empty string.
-              pattern = re.compile(r'/[*][^*]*Bundle React Native code and images[*]/.*?;', re.DOTALL)
-              new_content = re.sub(pattern, '', content)
-              
-              # Also kill the shell script content specifically just in case
-              new_content = new_content.replace('react-native-xcode.sh', 'echo skipping')
-
-              with open(proj_path, 'w') as f:
-                  f.write(new_content)
-              print("Successfully purged Bundle Build Phase.")
-          else:
-              print("Could not find xcodeproj file.")
-
-      - name: Surgical Build Phase Purge
-        shell: python3 {0}
-        run: |
-          import os
-          import re
-
-          proj_path = None
-          for root, dirs, files in os.walk('ios'):
-              if root.endswith('.xcodeproj'):
-                  proj_path = os.path.join(root, 'project.pbxproj')
-                  break
-
-          if proj_path:
-              with open(proj_path, 'r') as f:
-                  content = f.read()
-
-              # 1. Kill the Bundle Script execution and its dependencies
-              # This regex wipes the script and the input/output paths that cause the 'target ended' hang
-              content = re.sub(r'/[*] Bundle React Native code and images [*]/ = \{.*?shellScript = ".*?";.*?\}', 
-                               '/* Nuked */ = { isa = PBXShellScriptBuildPhase; buildActionMask = 2147483647; files = (); name = "Bundle React Native code and images"; runOnlyForDeploymentPostprocessing = 0; shellPath = /bin/sh; shellScript = "exit 0"; }', 
-                               content, flags=re.DOTALL)
-
-              # 2. Kill the Hermes config script (another common Code 75 culprit)
-              content = content.replace('react-native-xcode.sh', 'exit 0')
-              content = content.replace('hermes-engine/destroot/bin/hermesc', 'exit 0')
-
-              with open(proj_path, 'w') as f:
-                  f.write(content)
-              print("Project file sanitized.")
-      
       - name: Manual JS Bundle Generation
         run: |
-          # Install the specific modules the Metro graph needs to resolve
+          # Crucial: Install dependencies that TensorFlow's bridge requires
           npm install @expo/metro-config @react-native/metro-config @tensorflow/tfjs @tensorflow/tfjs-react-native expo-asset expo-file-system expo-constants expo-image-picker --save-dev
           
           rm -rf ios/main.jsbundle
           mkdir -p ios
-          
           export NODE_BINARY=$(which node)
           
           npx react-native bundle \
@@ -265,9 +120,8 @@ jobs:
         run: |
           WORKSPACE_PATH=$(find . -name "*.xcworkspace" | head -1)
           SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
-          export SKIP_BUNDLING=1
-          export NODE_BINARY=$(which node)
           
+          # Use -parallelizeTargets=NO to prevent the "Unknown build action 'NO'" error
           xcodebuild archive \
             -workspace "$WORKSPACE_PATH" \
             -scheme "$SCHEME_NAME" \
@@ -276,14 +130,15 @@ jobs:
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -jobs 3 \
+            -parallelizeTargets=NO \
+            -derivedDataPath build/DerivedData \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            ENABLE_USER_SCRIPT_SANDBOXING=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            ENABLE_USER_SCRIPT_SANDBOXING=NO \
-            SKIP_BUNDLING=YES \
-            FORCE_BUNDLING=NO \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
             VFS_SKIP_ZIP_EXISTS_CHECK=YES \
-            
-            COMPILER_INDEX_STORE_ENABLE=NO \
+            SKIP_BUNDLING=YES \
             CLANG_ENABLE_MODULE_DEBUGGING=NO
       
       - name: Package into IPA
