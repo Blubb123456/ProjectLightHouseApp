@@ -312,7 +312,10 @@ jobs:
             -showBuildTimingSummary \
             IDETestCheckingEnabled=NO \
             VALIDATE_WORKSPACE=NO \
-            DISABLE_MANUAL_TARGET_ORDER_BUILD_WARNING=YES
+            DISABLE_MANUAL_TARGET_ORDER_BUILD_WARNING=YES \
+            SWIFT_OPTIMIZATION_LEVEL="-Onone" \
+            ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS=NO \
+            GENERATE_INFOPLIST_FILE=YES
             
       
       - name: Package into IPA
