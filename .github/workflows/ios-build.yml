@@ -328,7 +328,6 @@ jobs:
           WORKSPACE_PATH=$(find . -name "*.xcworkspace" | head -1)
           SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
           
-          # Use -parallelizeTargets=NO to prevent the "Unknown build action 'NO'" error
           xcodebuild archive \
             -workspace ios/ProjectLightHouseReactApp.xcworkspace \
             -scheme ProjectLightHouseReactApp \
@@ -337,11 +336,17 @@ jobs:
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
+            -parallelizeTargets=NO \
+            HEADER_SEARCH_PATHS='$(inherited) "${PODS_ROOT}/Headers/Public" "${PODS_ROOT}/Headers/Public/React-Core" "${PODS_ROOT}/Headers/Public/ExpoModulesCore" "${PODS_CONFIGURATION_BUILD_DIR}/ExpoModulesCore/ExpoModulesCore.framework/Headers"' \
+            OTHER_SWIFT_FLAGS='$(inherited) -D EXPO_SETTINGS_BUNDLE_ID=com.your.bundle.id' \
+            SWIFT_OPTIMIZATION_LEVEL="-Onone" \
             RCT_NEW_ARCH_ENABLED=0 \
+            DEFINES_MODULE=YES \
             VALIDATE_WORKSPACE=NO \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
             SKIP_BUNDLING=YES
             
       
