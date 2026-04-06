@@ -82,6 +82,10 @@ jobs:
           pod 'ExpoModulesCore', :modular_headers => true
           pod 'Expo', :modular_headers => true
           target target_name do
+            node_modules_path = '../node_modules'
+            
+            require_relative "#{node_modules_path}/expo/scripts/autolinking"
+            require_relative "#{node_modules_path}/react-native/scripts/react_native_pods"
             use_expo_modules!
             config = use_native_modules!
 
@@ -89,6 +93,8 @@ jobs:
             pod 'Expo', :path => '../node_modules/expo'
             use_react_native!(
               :path => config[:reactNativePath],
+              # This line stops the Codegen loop that caused your Code 1
+              :fabric_enabled => false,
               :hermes_enabled => true
             )
 
@@ -357,7 +363,8 @@ jobs:
             GENERATE_INFOPLIST_FILE=YES \
             GENERATE_INFOPLIST_FILE=YES \
             ASSETCATALOG_COMPILER_SKIP_APP_ICON_COMPILATION=YES \
-           DEFINES_MODULE=YES
+           DEFINES_MODULE=YES \
+           RCT_NEW_ARCH_ENABLED=0
             
       
       - name: Package into IPA
