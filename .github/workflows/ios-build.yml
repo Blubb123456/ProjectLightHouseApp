@@ -78,8 +78,6 @@ jobs:
 
           target 'ProjectLightHouseReactApp' do
             use_expo_modules!
-            
-            # This line automatically handles the config lookup that failed
             config = use_native_modules!
 
             use_react_native!(
@@ -90,14 +88,14 @@ jobs:
 
             post_install do |installer|
               installer.pods_project.targets.each do |target|
-                # Fix 'No such module Expo' by forcing the module definition
-                if ['Expo', 'ExpoModulesCore'].include?(target.name)
+                # Force module definitions for Expo to fix the Swift 'import' error
+                if target.name.include?('Expo')
                   target.build_configurations.each do |config|
                     config.build_settings['DEFINES_MODULE'] = 'YES'
                   end
                 end
 
-                # Global fixes for Xcode 16.4 and CI stability
+                # Set global compiler flags for Xcode 16.4 stability
                 target.build_configurations.each do |config|
                   config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
                   config.build_settings['SWIFT_VERSION'] = '5.0'
@@ -105,8 +103,11 @@ jobs:
                   config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
                 end
               end
-              # Standard Expo compatibility hook
-              __apply_Xcode_12_5_M1_post_install_workaround(installer)
+              
+              # Standard compatibility hook - wrapped in a check to prevent nil errors
+              if respond_to?(:__apply_Xcode_12_5_M1_post_install_workaround)
+                __apply_Xcode_12_5_M1_post_install_workaround(installer)
+              end
             end
           end
           EOF
@@ -329,37 +330,19 @@ jobs:
           
           # Use -parallelizeTargets=NO to prevent the "Unknown build action 'NO'" error
           xcodebuild archive \
-            -workspace "$WORKSPACE_PATH" \
-            -scheme "$SCHEME_NAME" \
+            -workspace ios/ProjectLightHouseReactApp.xcworkspace \
+            -scheme ProjectLightHouseReactApp \
             -configuration Release \
             -archivePath build/ProjectLighthouse.xcarchive \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
-            -jobs 4 \
-            -parallelizeTargets=NO \
             -derivedDataPath build/DerivedData \
-            COMPILER_INDEX_STORE_ENABLE=NO \
+            RCT_NEW_ARCH_ENABLED=0 \
+            VALIDATE_WORKSPACE=NO \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            AD_HOC_CODE_SIGNING_ALLOWED=YES \
-            VFS_SKIP_ZIP_EXISTS_CHECK=YES \
-            SKIP_BUNDLING=YES \
-            CLANG_ENABLE_MODULE_DEBUGGING=NO \
-            ASSETCATALOG_COMPILER_SKIP_APP_ICON_COMPILATION=YES \
-            INTEGRATION_UNIT_TESTING_ENABLED=NO \
-            -allowProvisioningUpdates=NO \
-            -showBuildTimingSummary \
-            IDETestCheckingEnabled=NO \
-            VALIDATE_WORKSPACE=NO \
-            DISABLE_MANUAL_TARGET_ORDER_BUILD_WARNING=YES \
-            SWIFT_OPTIMIZATION_LEVEL="-Onone" \
-            ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS=NO \
-            GENERATE_INFOPLIST_FILE=YES \
-            GENERATE_INFOPLIST_FILE=YES \
-            ASSETCATALOG_COMPILER_SKIP_APP_ICON_COMPILATION=YES \
-           DEFINES_MODULE=YES \
-           RCT_NEW_ARCH_ENABLED=0
+            SKIP_BUNDLING=YES
             
       
       - name: Package into IPA
