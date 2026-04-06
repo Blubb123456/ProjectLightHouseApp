@@ -351,6 +351,20 @@ jobs:
             }
           }
           EOF
+      
+      - name: Pre-generate ExpoModulesProvider
+        run: |
+          mkdir -p ios/Pods/Target\ Support\ Files/Pods-ProjectLightHouseReactApp/
+          cat <<'EOF' > ios/Pods/Target\ Support\ Files/Pods-ProjectLightHouseReactApp/ExpoModulesProvider.swift
+          import ExpoModulesCore
+
+          @objc(ExpoModulesProvider)
+          public class ExpoModulesProvider: ModulesProvider {
+            public override func getModuleClasses() -> [AnyModule.Type] {
+              return []
+            }
+          }
+          EOF
 
       - name: Delete Failing Script Phases
         run: |
@@ -366,7 +380,7 @@ jobs:
           end
           project.save
           "
-
+          
       - name: Manual JS Bundle Generation
         run: |
           # Install the specific modules the Metro graph needs to resolve
@@ -403,6 +417,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
+            SWIFT_COMPILATION_MODE=wholemodule \
             ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOLS=NO \
             ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS=NO \
             SWIFT_INCLUDE_PATHS='$(inherited) "${DT_PRODUCT_COMBINED_BINARIES_DIR}/ExpoModulesCore" "${DT_PRODUCT_COMBINED_BINARIES_DIR}/Expo"' \
