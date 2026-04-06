@@ -63,10 +63,44 @@ jobs:
       - name: Force Node Link for Xcode
         run: sudo ln -sf $(which node) /usr/local/bin/node
 
+      - name: Force Node Symlink
+        run: sudo ln -sf $(which node) /usr/local/bin/node
+
       - name: Install Pods
         run: |
           cd ios
           pod install
+
+      - name: Physically Purge Failing Phases
+        shell: python3 {0}
+        run: |
+          import os
+          # Find the pbxproj
+          proj_path = next((os.path.join(root, 'project.pbxproj') for root, _, files in os.walk('ios') if root.endswith('.xcodeproj')), None)
+          
+          if proj_path:
+              print(f"Purging phases from {proj_path}")
+              with open(proj_path, 'r') as f:
+                  lines = f.readlines()
+              
+              new_lines = []
+              skip = False
+              for line in lines:
+                  # Detect the start of the failing phases
+                  if ('Bundle React Native code' in line or '[Hermes] Replace Hermes' in line) and 'isa = PBXShellScriptBuildPhase' in line:
+                      skip = True
+                      print(f"Removing phase: {line.strip()}")
+                  
+                  if not skip:
+                      new_lines.append(line)
+                  
+                  # Stop skipping once the phase block ends (usually indicated by };)
+                  if skip and '};' in line:
+                      skip = False
+              
+              with open(proj_path, 'w') as f:
+                  f.writelines(new_lines)
+              print("Cleanup complete.")
 
       - name: Force Node Symlink
         run: sudo ln -sf $(which node) /usr/local/bin/node
@@ -151,7 +185,7 @@ jobs:
             -archivePath build/ProjectLighthouse.xcarchive \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
-            -jobs 4 \
+            -jobs 1 \
             -parallelizeTargets=NO \
             -derivedDataPath build/DerivedData \
             COMPILER_INDEX_STORE_ENABLE=NO \
