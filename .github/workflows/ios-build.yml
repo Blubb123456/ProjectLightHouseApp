@@ -403,6 +403,8 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
+            ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOLS=NO \
+            ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS=NO \
             SWIFT_INCLUDE_PATHS='$(inherited) "${DT_PRODUCT_COMBINED_BINARIES_DIR}/ExpoModulesCore" "${DT_PRODUCT_COMBINED_BINARIES_DIR}/Expo"' \
             ASSETCATALOG_COMPILER_SKIP_APP_ICON_COMPILATION=YES \
             CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES=YES \
