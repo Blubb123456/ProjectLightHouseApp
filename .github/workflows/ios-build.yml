@@ -119,7 +119,22 @@ jobs:
         run: |
           cd ios
           pod install
-
+      
+      - name: Delete Failing Script Phases
+        run: |
+          gem install xcodeproj
+          ruby -e "
+          require 'xcodeproj'
+          project_path = Dir.glob('ios/*.xcodeproj').first
+          project = Xcodeproj::Project.open(project_path)
+          project.targets.each do |target|
+            target.shell_script_build_phases.delete_if do |phase|
+              ['[Expo] Configure project', 'Bundle React Native code and images'].include?(phase.name)
+            end
+          end
+          project.save
+          "
+      
       - name: Delete Failing Script Phases
         run: |
           gem install xcodeproj
