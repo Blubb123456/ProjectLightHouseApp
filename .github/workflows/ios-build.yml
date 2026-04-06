@@ -416,15 +416,11 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
-            ASSETCATALOG_COMPILER_SKIP_APP_ICON_COMPILATION=YES \
-            CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES=YES \
-            HEADER_SEARCH_PATHS='$(inherited) "${PODS_ROOT}/Headers/Public" "${PODS_ROOT}/Headers/Public/React-Core" "${PODS_ROOT}/Headers/Public/ExpoModulesCore" "${PODS_CONFIGURATION_BUILD_DIR}/ExpoModulesCore/ExpoModulesCore.framework/Headers"' \
-            OTHER_SWIFT_FLAGS='$(inherited) -D EXPO_SETTINGS_BUNDLE_ID=com.your.bundle.id' \
-            SWIFT_OPTIMIZATION_LEVEL="-Onone" \
-            RCT_NEW_ARCH_ENABLED=0 \
-            DEFINES_MODULE=YES \
             VALIDATE_WORKSPACE=NO \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            ASSETCATALOG_COMPILER_SKIP_APP_ICON_COMPILATION=YES \
+            SWIFT_OPTIMIZATION_LEVEL="-Onone" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
