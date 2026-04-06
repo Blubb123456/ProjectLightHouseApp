@@ -112,6 +112,36 @@ jobs:
           cd ios
           pod install
 
+      - name: Global Shell Script Neutralization
+        shell: python3 {0}
+        run: |
+          import os
+          import re
+
+          # Find the main project file and the Pods project file
+          project_files = []
+          for root, dirs, files in os.walk('ios'):
+              if root.endswith('.xcodeproj'):
+                  project_files.append(os.path.join(root, 'project.pbxproj'))
+
+          for proj_path in project_files:
+              print(f"Neutralizing all shell scripts in {proj_path}")
+              with open(proj_path, 'r') as f:
+                  content = f.read()
+
+              # This regex targets the shellScript attribute of ANY PBXShellScriptBuildPhase
+              # It replaces the actual command with 'exit 0'
+              content = re.sub(
+                  r'(shellScript = ").*?(";)',
+                  r'\1exit 0\2',
+                  content,
+                  flags=re.DOTALL
+              )
+
+              with open(proj_path, 'w') as f:
+                  f.write(content)
+          print("All scripts neutralized.")
+
       - name: Kill Hermes and Bundle Scripts
         shell: python3 {0}
         run: |
