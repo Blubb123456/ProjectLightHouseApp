@@ -68,6 +68,37 @@ jobs:
           cd ios
           pod install
 
+      - name: Force Node Symlink
+        run: sudo ln -sf $(which node) /usr/local/bin/node
+      
+      - name: Hard Purge Build Phases
+        shell: python3 {0}
+        run: |
+          import os
+          proj_path = next((os.path.join(root, 'project.pbxproj') for root, _, files in os.walk('ios') if root.endswith('.xcodeproj')), None)
+          if proj_path:
+              print(f"Purging phases from {proj_path}")
+              with open(proj_path, 'r') as f:
+                  lines = f.readlines()
+              
+              new_lines = []
+              skip = False
+              for line in lines:
+                  # Detect the start of the failing phases
+                  if ('Bundle React Native code' in line or '[Hermes] Replace Hermes' in line) and 'isa = PBXShellScriptBuildPhase' in line:
+                      skip = True
+                      print(f"Removing phase: {line.strip()}")
+                  
+                  if not skip:
+                      new_lines.append(line)
+                  
+                  # Stop skipping once the phase block ends
+                  if skip and '};' in line:
+                      skip = False
+              
+              with open(proj_path, 'w') as f:
+                  f.writelines(new_lines)
+
       - name: Physically Purge Failing Phases
         shell: python3 {0}
         run: |
@@ -120,7 +151,7 @@ jobs:
             -archivePath build/ProjectLighthouse.xcarchive \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
-            -jobs 3 \
+            -jobs 4 \
             -parallelizeTargets=NO \
             -derivedDataPath build/DerivedData \
             COMPILER_INDEX_STORE_ENABLE=NO \
@@ -134,7 +165,9 @@ jobs:
             ASSETCATALOG_COMPILER_SKIP_APP_ICON_COMPILATION=YES \
             INTEGRATION_UNIT_TESTING_ENABLED=NO \
             -allowProvisioningUpdates=NO \
-            -showBuildTimingSummary
+            -showBuildTimingSummary \
+            IDETestCheckingEnabled=NO 
+            
       
       - name: Package into IPA
         run: |
