@@ -83,7 +83,9 @@ jobs:
             use_react_native!(
               :path => config[:reactNativePath],
               :hermes_enabled => true,
-              :fabric_enabled => false
+              :fabric_enabled => false,
+              # This specifically prevents the creation of the failing Provider
+              :new_arch_enabled => false
             )
 
             post_install do |installer|
@@ -92,6 +94,7 @@ jobs:
                 if target.name.include?('Expo')
                   target.build_configurations.each do |config|
                     config.build_settings['DEFINES_MODULE'] = 'YES'
+                    config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
                   end
                 end
 
@@ -337,6 +340,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
+            CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES=YES \
             HEADER_SEARCH_PATHS='$(inherited) "${PODS_ROOT}/Headers/Public" "${PODS_ROOT}/Headers/Public/React-Core" "${PODS_ROOT}/Headers/Public/ExpoModulesCore" "${PODS_CONFIGURATION_BUILD_DIR}/ExpoModulesCore/ExpoModulesCore.framework/Headers"' \
             OTHER_SWIFT_FLAGS='$(inherited) -D EXPO_SETTINGS_BUNDLE_ID=com.your.bundle.id' \
             SWIFT_OPTIMIZATION_LEVEL="-Onone" \
@@ -347,7 +351,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
-            SKIP_BUNDLING=YES
+            SKIP_BUNDLING=YES 
             
       
       - name: Package into IPA
