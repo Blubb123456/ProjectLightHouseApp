@@ -358,7 +358,8 @@ jobs:
             GENERATE_INFOPLIST_FILE=YES \
             ASSETCATALOG_COMPILER_SKIP_APP_ICON_COMPILATION=YES \
             HEADER_SEARCH_PATHS='$(inherited) "${PODS_CONFIGURATION_BUILD_DIR}/Expo/Expo.framework/Headers"' \
-            OTHER_SWIFT_FLAGS='$(inherited) -D EXPO_SETTINGS_BUNDLE_ID=com.your.bundle.id'            
+            OTHER_SWIFT_FLAGS='$(inherited) -D EXPO_SETTINGS_BUNDLE_ID=com.your.bundle.id' \
+            USER_HEADER_SEARCH_PATHS='$(inherited) "${PODS_ROOT}/Headers/Private/yoga" "${PODS_ROOT}/Headers/Public/React-Core"' 
       
       - name: Package into IPA
         run: |
