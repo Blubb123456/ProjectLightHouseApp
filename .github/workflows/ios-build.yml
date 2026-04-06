@@ -74,10 +74,7 @@ jobs:
           require_relative '../node_modules/react-native/scripts/react_native_pods'
 
           platform :ios, '15.1'
-          
-          # Force modular headers only for the Expo core to fix the Swift import error
-          pod 'ExpoModulesCore', :modular_headers => true
-          pod 'Expo', :modular_headers => true
+          install! 'cocoapods', :deterministic_uuids => false
 
           target 'ProjectLightHouseReactApp' do
             use_expo_modules!
@@ -92,18 +89,20 @@ jobs:
 
             post_install do |installer|
               installer.pods_project.targets.each do |target|
-                # This ensures the compiler sees these as Swift modules
-                if ['Expo', 'ExpoModulesCore', 'Pods-ProjectLightHouseReactApp'].include?(target.name)
+                # This fixes the 'No such module Expo' error for Swift
+                if target.name.include?('Expo') || target.name.include?('Pods-ProjectLightHouseReactApp')
                   target.build_configurations.each do |config|
                     config.build_settings['DEFINES_MODULE'] = 'YES'
-                    config.build_settings['SWIFT_OBJC_INTERFACE_HEADER_NAME'] = "#{target.name}-Swift.h"
+                    config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
                   end
                 end
 
+                # Global stability fixes for Xcode 16.4
                 target.build_configurations.each do |config|
                   config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
-                  config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+                  config.build_settings['SWIFT_VERSION'] = '5.0'
                   config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+                  config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
                 end
               end
             end
@@ -401,7 +400,6 @@ jobs:
         run: |
           WORKSPACE_PATH=$(find . -name "*.xcworkspace" | head -1)
           SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
-          
           xcodebuild archive \
             -workspace ios/ProjectLightHouseReactApp.xcworkspace \
             -scheme ProjectLightHouseReactApp \
@@ -411,7 +409,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
-            HEADER_SEARCH_PATHS='$(inherited) "${PODS_CONFIGURATION_BUILD_DIR}/ExpoModulesCore/ExpoModulesCore.framework/Headers" "${PODS_ROOT}/Headers/Public/ExpoModulesCore"' \
+            HEADER_SEARCH_PATHS='$(inherited) "${PODS_ROOT}/Headers/Public" "${PODS_ROOT}/Headers/Public/ExpoModulesCore"' \
             OTHER_SWIFT_FLAGS='$(inherited) -D EXPO_SETTINGS_BUNDLE_ID=com.your.bundle.id' \
             SWIFT_OPTIMIZATION_LEVEL="-Onone" \
             RCT_NEW_ARCH_ENABLED=0 \
