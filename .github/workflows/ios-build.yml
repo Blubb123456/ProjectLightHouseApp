@@ -66,37 +66,40 @@ jobs:
       - name: Force Node Symlink
         run: sudo ln -sf $(which node) /usr/local/bin/node
 
-      - name: Surgical Podfile Patch
+      - name: Atomic Podfile Overwrite
         run: |
           cd ios
-          cat <<'EOF' > pod_patch.rb
-          path = 'Podfile'
-          content = File.read(path)
-          
-          # Fix Xcode 16 UUID stability
-          unless content.include?('deterministic_uuids')
-            content = "install! 'cocoapods', :deterministic_uuids => false\n" + content
-          end
-          
-          # The Force-Fix Hook
-          footer = <<~RUBY
+          cat <<'EOF' > Podfile
+          require_relative '../node_modules/expo/scripts/autolinking'
+          require_relative '../node_modules/react-native/scripts/react_native_pods'
+
+          platform :ios, '15.1'
+          install! 'cocoapods', :deterministic_uuids => false
+
+          target 'ProjectLightHouseReactApp' do
+            use_expo_modules!
+            config = use_native_modules!
+
+            use_react_native!(
+              :path => config[:reactNativePath],
+              :hermes_enabled => true
+            )
+
             post_install do |installer|
               installer.pods_project.targets.each do |target|
                 target.build_configurations.each do |config|
+                  # Fix the optimization mismatch from your logs
                   config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
                   config.build_settings['SWIFT_VERSION'] = '5.0'
                   config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
                   config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
                 end
               end
+              # Standard Expo post-install hook
+              __apply_Xcode_12_5_M1_post_install_workaround(installer)
             end
-          RUBY
-          
-          # Clean old hooks and append new one
-          content = content.gsub(/post_install do.*?end/m, '')
-          File.write(path, content + "\n" + footer)
+          end
           EOF
-          ruby pod_patch.rb
       
       - name: Install Pods
         run: |
