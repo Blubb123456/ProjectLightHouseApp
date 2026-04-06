@@ -66,17 +66,21 @@ jobs:
       - name: Force Node Symlink
         run: sudo ln -sf $(which node) /usr/local/bin/node
 
-      - name: Atomic Podfile Overwrite
+      - name: Dynamic Podfile Overwrite
         run: |
           cd ios
           cat <<'EOF' > Podfile
           require_relative '../node_modules/expo/scripts/autolinking'
           require_relative '../node_modules/react-native/scripts/react_native_pods'
 
+          # Force standard deployment and stability
           platform :ios, '15.1'
           install! 'cocoapods', :deterministic_uuids => false
 
-          target 'ProjectLightHouseReactApp' do
+          # Dynamically detect target name from Expo
+          target_name = File.basename(Dir.glob('*.xcodeproj')[0], '.xcodeproj')
+
+          target target_name do
             use_expo_modules!
             config = use_native_modules!
 
@@ -88,15 +92,17 @@ jobs:
             post_install do |installer|
               installer.pods_project.targets.each do |target|
                 target.build_configurations.each do |config|
-                  # Fix the optimization mismatch from your logs
+                  # Force-fix the optimization mismatch (Code 65/75 prevention)
                   config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
                   config.build_settings['SWIFT_VERSION'] = '5.0'
                   config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
                   config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
                 end
               end
-              # Standard Expo post-install hook
-              __apply_Xcode_12_5_M1_post_install_workaround(installer)
+              # Standard Expo/RN compatibility hooks
+              if defined?(__apply_Xcode_12_5_M1_post_install_workaround)
+                __apply_Xcode_12_5_M1_post_install_workaround(installer)
+              end
             end
           end
           EOF
