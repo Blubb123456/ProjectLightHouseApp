@@ -120,6 +120,21 @@ jobs:
           cd ios
           pod install
 
+      - name: Delete Failing Script Phases
+        run: |
+          gem install xcodeproj
+          ruby -e "
+          require 'xcodeproj'
+          project_path = Dir.glob('ios/*.xcodeproj').first
+          project = Xcodeproj::Project.open(project_path)
+          project.targets.each do |target|
+            target.shell_script_build_phases.delete_if do |phase|
+              ['[Expo] Configure project', 'Bundle React Native code and images'].include?(phase.name)
+            end
+          end
+          project.save
+          "
+
       - name: Surgical Build Phase Deletion
         run: |
           gem install xcodeproj
@@ -340,6 +355,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
+            ASSETCATALOG_COMPILER_SKIP_APP_ICON_COMPILATION=YES \
             CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES=YES \
             HEADER_SEARCH_PATHS='$(inherited) "${PODS_ROOT}/Headers/Public" "${PODS_ROOT}/Headers/Public/React-Core" "${PODS_ROOT}/Headers/Public/ExpoModulesCore" "${PODS_CONFIGURATION_BUILD_DIR}/ExpoModulesCore/ExpoModulesCore.framework/Headers"' \
             OTHER_SWIFT_FLAGS='$(inherited) -D EXPO_SETTINGS_BUNDLE_ID=com.your.bundle.id' \
