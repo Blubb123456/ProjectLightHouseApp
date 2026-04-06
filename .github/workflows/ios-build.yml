@@ -79,8 +79,8 @@ jobs:
 
           # Dynamically detect target name from Expo
           target_name = File.basename(Dir.glob('*.xcodeproj')[0], '.xcodeproj')
-          # Force modular headers for Expo
-          use_modular_headers!
+          pod 'ExpoModulesCore', :modular_headers => true
+          pod 'Expo', :modular_headers => true
           target target_name do
             use_expo_modules!
             config = use_native_modules!
@@ -357,9 +357,8 @@ jobs:
             GENERATE_INFOPLIST_FILE=YES \
             GENERATE_INFOPLIST_FILE=YES \
             ASSETCATALOG_COMPILER_SKIP_APP_ICON_COMPILATION=YES \
-            HEADER_SEARCH_PATHS='$(inherited) "${PODS_CONFIGURATION_BUILD_DIR}/Expo/Expo.framework/Headers"' \
-            OTHER_SWIFT_FLAGS='$(inherited) -D EXPO_SETTINGS_BUNDLE_ID=com.your.bundle.id' \
-            USER_HEADER_SEARCH_PATHS='$(inherited) "${PODS_ROOT}/Headers/Private/yoga" "${PODS_ROOT}/Headers/Public/React-Core"' 
+           DEFINES_MODULE=YES
+            
       
       - name: Package into IPA
         run: |
