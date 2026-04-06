@@ -59,45 +59,36 @@ jobs:
           EOF
           # Run the ruby script to actually modify the file
           ruby pod_patch.rb
+      
+      - name: Force Node Link for Xcode
+        run: sudo ln -sf $(which node) /usr/local/bin/node
 
       - name: Install Pods
         run: |
           cd ios
           pod install
 
-      # CONSOLIDATED NUKE STEP: This replaces the 5 redundant steps in your current YAML
-      - name: Neutralize Failing Build Phases
+      - name: Physically Purge Failing Phases
         shell: python3 {0}
         run: |
           import os
-          import re
-
           proj_path = next((os.path.join(root, 'project.pbxproj') for root, _, files in os.walk('ios') if root.endswith('.xcodeproj')), None)
-          
           if proj_path:
-              print(f"Sanitizing {proj_path}")
               with open(proj_path, 'r') as f:
-                  content = f.read()
-
-              # 1. Kill the Bundle React Native script execution
-              content = re.sub(
-                  r'(name = "Bundle React Native code and images";\s+shellPath = /bin/sh;\s+shellScript = ").*?(";)',
-                  r'\1exit 0\2',
-                  content,
-                  flags=re.DOTALL
-              )
-
-              # 2. Kill the Hermes config script (prevents background hangs)
-              content = re.sub(
-                  r'(name = "\[CP-User\] \[Hermes\] Replace Hermes.*?shellScript = ").*?(";)',
-                  r'\1exit 0\2',
-                  content,
-                  flags=re.DOTALL
-              )
-
+                  lines = f.readlines()
               with open(proj_path, 'w') as f:
-                  f.write(content)
-              print("Build phases neutralized.")
+                  skip = False
+                  for line in lines:
+                      # If we hit the start of the Bundle or Hermes phases, start skipping
+                      if ('Bundle React Native code' in line or '[Hermes] Replace Hermes' in line) and 'isa = PBXShellScriptBuildPhase' in line:
+                          skip = True
+                      # Stop skipping once we hit the end of that specific phase block
+                      if skip and '};' in line:
+                          skip = False
+                          continue 
+                      if not skip:
+                          f.write(line)
+              print("Phases physically removed from project metadata.")
 
       - name: Manual JS Bundle Generation
         run: |
@@ -139,7 +130,11 @@ jobs:
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
             VFS_SKIP_ZIP_EXISTS_CHECK=YES \
             SKIP_BUNDLING=YES \
-            CLANG_ENABLE_MODULE_DEBUGGING=NO
+            CLANG_ENABLE_MODULE_DEBUGGING=NO \
+            ASSETCATALOG_COMPILER_SKIP_APP_ICON_COMPILATION=YES \
+            INTEGRATION_UNIT_TESTING_ENABLED=NO \
+            -allowProvisioningUpdates=NO \
+            -showBuildTimingSummary
       
       - name: Package into IPA
         run: |
