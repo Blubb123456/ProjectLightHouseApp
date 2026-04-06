@@ -318,6 +318,35 @@ jobs:
                           f.write(line)
               print("Phases physically removed from project metadata.")
 
+      - name: Pre-generate ExpoModulesProvider
+        run: |
+          mkdir -p ios/Pods/Target\ Support\ Files/Pods-ProjectLightHouseReactApp/
+          cat <<'EOF' > ios/Pods/Target\ Support\ Files/Pods-ProjectLightHouseReactApp/ExpoModulesProvider.swift
+          import ExpoModulesCore
+
+          @objc(ExpoModulesProvider)
+          public class ExpoModulesProvider: ModulesProvider {
+            public override func getModuleClasses() -> [AnyModule.Type] {
+              return []
+            }
+          }
+          EOF
+
+      - name: Delete Failing Script Phases
+        run: |
+          gem install xcodeproj
+          ruby -e "
+          require 'xcodeproj'
+          project_path = Dir.glob('ios/*.xcodeproj').first
+          project = Xcodeproj::Project.open(project_path)
+          project.targets.each do |target|
+            target.shell_script_build_phases.delete_if do |phase|
+              ['[Expo] Configure project', 'Bundle React Native code and images'].include?(phase.name)
+            end
+          end
+          project.save
+          "
+
       - name: Manual JS Bundle Generation
         run: |
           # Install the specific modules the Metro graph needs to resolve
