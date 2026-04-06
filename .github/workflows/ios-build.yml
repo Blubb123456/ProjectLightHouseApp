@@ -79,15 +79,14 @@ jobs:
 
           # Dynamically detect target name from Expo
           target_name = File.basename(Dir.glob('*.xcodeproj')[0], '.xcodeproj')
-          pod 'ExpoModulesCore', :modular_headers => true
-          pod 'Expo', :modular_headers => true
-          target target_name do
+          use_modular_headers_for_pods = ['Expo', 'ExpoModulesCore']
+          target 'ProjectLightHouseReactApp' do
             node_modules_path = '../node_modules'
             
             require_relative "#{node_modules_path}/expo/scripts/autolinking"
             require_relative "#{node_modules_path}/react-native/scripts/react_native_pods"
             use_expo_modules!
-            config = use_native_modules!
+            config = use_native_modules!(node_modules_path)
 
             # This is the critical line for the 'no such module Expo' error
             pod 'Expo', :path => '../node_modules/expo'
@@ -100,8 +99,14 @@ jobs:
 
             post_install do |installer|
               installer.pods_project.targets.each do |target|
+                # This fixes the 'no such module Expo' by forcing modularity
+                if use_modular_headers_for_pods.include?(target.name)
+                  target.build_configurations.each do |config|
+                    config.build_settings['DEFINES_MODULE'] = 'YES'
+                  end
+                end
+
                 target.build_configurations.each do |config|
-                  # Force-fix the optimization mismatch (Code 65/75 prevention)
                   config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
                   config.build_settings['SWIFT_VERSION'] = '5.0'
                   config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
