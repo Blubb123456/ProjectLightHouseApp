@@ -73,39 +73,31 @@ jobs:
           require_relative '../node_modules/expo/scripts/autolinking'
           require_relative '../node_modules/react-native/scripts/react_native_pods'
 
-          # Force standard deployment and stability
           platform :ios, '15.1'
           install! 'cocoapods', :deterministic_uuids => false
 
-          # Dynamically detect target name from Expo
-          target_name = File.basename(Dir.glob('*.xcodeproj')[0], '.xcodeproj')
-          use_modular_headers_for_pods = ['Expo', 'ExpoModulesCore']
           target 'ProjectLightHouseReactApp' do
-            node_modules_path = '../node_modules'
-            
-            require_relative "#{node_modules_path}/expo/scripts/autolinking"
-            require_relative "#{node_modules_path}/react-native/scripts/react_native_pods"
             use_expo_modules!
-            config = use_native_modules!(node_modules_path)
+            
+            # This line automatically handles the config lookup that failed
+            config = use_native_modules!
 
-            # This is the critical line for the 'no such module Expo' error
-            pod 'Expo', :path => '../node_modules/expo'
             use_react_native!(
               :path => config[:reactNativePath],
-              # This line stops the Codegen loop that caused your Code 1
-              :fabric_enabled => false,
-              :hermes_enabled => true
+              :hermes_enabled => true,
+              :fabric_enabled => false
             )
 
             post_install do |installer|
               installer.pods_project.targets.each do |target|
-                # This fixes the 'no such module Expo' by forcing modularity
-                if use_modular_headers_for_pods.include?(target.name)
+                # Fix 'No such module Expo' by forcing the module definition
+                if ['Expo', 'ExpoModulesCore'].include?(target.name)
                   target.build_configurations.each do |config|
                     config.build_settings['DEFINES_MODULE'] = 'YES'
                   end
                 end
 
+                # Global fixes for Xcode 16.4 and CI stability
                 target.build_configurations.each do |config|
                   config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
                   config.build_settings['SWIFT_VERSION'] = '5.0'
@@ -113,10 +105,8 @@ jobs:
                   config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
                 end
               end
-              # Standard Expo/RN compatibility hooks
-              if defined?(__apply_Xcode_12_5_M1_post_install_workaround)
-                __apply_Xcode_12_5_M1_post_install_workaround(installer)
-              end
+              # Standard Expo compatibility hook
+              __apply_Xcode_12_5_M1_post_install_workaround(installer)
             end
           end
           EOF
