@@ -484,7 +484,7 @@ jobs:
         run: |
           WORKSPACE_PATH=$(find . -name "*.xcworkspace" | head -1)
           SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
-          codebuild archive \
+          xcodebuild archive \
             -workspace ios/ProjectLightHouseReactApp.xcworkspace \
             -scheme ProjectLightHouseReactApp \
             -configuration Release \
