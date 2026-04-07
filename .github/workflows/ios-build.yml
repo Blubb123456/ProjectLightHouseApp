@@ -113,7 +113,27 @@ jobs:
         run: |
           cd ios
           pod install
-      
+
+      - name: Absolute Phase Deletion
+        run: |
+          gem install xcodeproj
+          ruby -e "
+          require 'xcodeproj'
+          # Check every .xcodeproj in the ios directory
+          Dir.glob('ios/*.xcodeproj').each do |path|
+            puts \"Cleaning project: #{path}\"
+            project = Xcodeproj::Project.open(path)
+            project.targets.each do |target|
+              target.shell_script_build_phases.delete_if do |phase|
+                match = ['[Expo] Configure project', 'Bundle React Native code and images'].include?(phase.name)
+                puts \"  Deleted #{phase.name} from #{target.name}\" if match
+                match
+              end
+            end
+            project.save
+          end
+          "
+          
       - name: Delete Failing Script Phases
         run: |
           gem install xcodeproj
@@ -461,6 +481,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
+            INFOPLIST_ENABLE_STRICT_OUTPUT_FORMAT=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
             SKIP_INSTALL=NO \
             SWIFT_COMPILATION_MODE=wholemodule \
@@ -478,6 +499,7 @@ jobs:
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
             SKIP_BUNDLING=YES
             
       
