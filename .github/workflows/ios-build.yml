@@ -160,15 +160,21 @@ jobs:
           gem install xcodeproj
           ruby -e "
           require 'xcodeproj'
-          Dir.glob('ios/*.xcodeproj').each do |path|
-            puts \"Checking project: #{path}\"
+          # Search everywhere for xcodeproj files
+          Dir.glob('**/*.xcodeproj').each do |path|
+            puts \"Opening Project: #{path}\"
             project = Xcodeproj::Project.open(path)
             project.targets.each do |target|
-              puts \"  Target: #{target.name}\"
+              puts \"  Checking Target: #{target.name}\"
               target.shell_script_build_phases.delete_if do |phase|
-                match = ['[Expo] Configure project', 'Bundle React Native code and images'].include?(phase.name)
-                puts \"    Deleted phase: #{phase.name}\" if match
-                match
+                # Case-insensitive partial match to catch '[Expo] Configure' or 'Bundle React...'
+                name = phase.name || ''
+                if name.downcase.include?('expo') || name.downcase.include?('bundle')
+                  puts \"  >>> DELETED: #{name} from #{target.name}\"
+                  true
+                else
+                  false
+                end
               end
             end
             project.save
@@ -478,7 +484,7 @@ jobs:
         run: |
           WORKSPACE_PATH=$(find . -name "*.xcworkspace" | head -1)
           SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
-          xcodebuild archive \
+          codebuild archive \
             -workspace ios/ProjectLightHouseReactApp.xcworkspace \
             -scheme ProjectLightHouseReactApp \
             -configuration Release \
@@ -487,26 +493,11 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
-            BUILD_LIBRARIES_FOR_DISTRIBUTION=YES \
-            IBTOOL_FORCE_NOTICES=NO \
-            IBSC_OPTIONS="--no-warnings" \
             GCC_PRECOMPILE_PREFIX_HEADER=NO \
-            INFOPLIST_ENABLE_STRICT_OUTPUT_FORMAT=NO \
-            COMPILER_INDEX_STORE_ENABLE=NO \
-            SKIP_INSTALL=NO \
-            SWIFT_COMPILATION_MODE=wholemodule \
-            ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOLS=NO \
-            ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS=NO \
-            SWIFT_INCLUDE_PATHS='$(inherited) "${DT_PRODUCT_COMBINED_BINARIES_DIR}/ExpoModulesCore" "${DT_PRODUCT_COMBINED_BINARIES_DIR}/Expo"' \
-            ASSETCATALOG_COMPILER_SKIP_APP_ICON_COMPILATION=YES \
-            CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES=YES \
-            HEADER_SEARCH_PATHS='$(inherited) "${PODS_ROOT}/Headers/Public" "${PODS_ROOT}/Headers/Public/ExpoModulesCore"' \
-            OTHER_SWIFT_FLAGS='$(inherited) -D EXPO_SETTINGS_BUNDLE_ID=com.your.bundle.id' \
-            SWIFT_OPTIMIZATION_LEVEL="-Onone" \
-            RCT_NEW_ARCH_ENABLED=0 \
-            DEFINES_MODULE=YES \
-            VALIDATE_WORKSPACE=NO \
+            GCC_REPORT_PCH_PROCESS=NO \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
+            SWIFT_COMPILATION_MODE=wholemodule \
+            COMPILER_INDEX_STORE_ENABLE=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
