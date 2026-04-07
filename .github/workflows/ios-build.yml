@@ -480,6 +480,17 @@ jobs:
           rm -rf ~/Library/Developer/Xcode/DerivedData/*
           xcodebuild clean -workspace ios/*.xcworkspace -scheme ProjectLightHouseReactApp -configuration Release
 
+      - name: Manual Module Map Symlinking
+        run: |
+          MAP_DIR="build/DerivedData/Build/Intermediates.noindex/ArchiveIntermediates/ProjectLightHouseReactApp/BuildProductsPath/Release-iphoneos"
+          mkdir -p "$MAP_DIR/ExpoModulesCore"
+          mkdir -p "$MAP_DIR/ExpoKeepAwake"
+          
+          # Link the maps from the Pods directory to the expected BuildProductsPath
+          find ios/Pods -name "ExpoModulesCore.modulemap" -exec cp {} "$MAP_DIR/ExpoModulesCore/" \;
+          find ios/Pods -name "ExpoKeepAwake.modulemap" -exec cp {} "$MAP_DIR/ExpoKeepAwake/" \;
+          echo "Module maps manually synchronized."
+
       - name: Build Unsigned Archive
         run: |
           WORKSPACE_PATH=$(find . -name "*.xcworkspace" | head -1)
@@ -493,6 +504,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
+            SWIFT_OPTIMIZATION_LEVEL="-Onone" \
             GCC_PRECOMPILE_PREFIX_HEADER=NO \
             GCC_REPORT_PCH_PROCESS=NO \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
