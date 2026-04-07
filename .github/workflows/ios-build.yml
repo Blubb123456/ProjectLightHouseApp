@@ -84,23 +84,21 @@ jobs:
               :path => config[:reactNativePath],
               :hermes_enabled => true,
               :fabric_enabled => false,
-              :new_arch_enabled => false
+              :new_arch_enabled => false # Explicitly kill the dependency provider
             )
 
             post_install do |installer|
-              # 1. Fix individual Pod targets
               installer.pods_project.targets.each do |target|
                 target.build_configurations.each do |config|
-                  config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-                  config.build_settings['ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOLS'] = 'NO'
-                  config.build_settings['ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS'] = 'NO'
-                  config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
-                  config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+                  # Force module definitions and bypass sandboxing
                   config.build_settings['DEFINES_MODULE'] = 'YES'
+                  config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+                  config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+                  config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
                 end
               end
               
-              # 2. Fix the main Project file (Aggregate Targets)
+              # Kill sandboxing at the project level
               installer.aggregate_targets.each do |target|
                 target.user_project.build_configurations.each do |config|
                   config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
@@ -150,7 +148,28 @@ jobs:
             project.save
           end
           "
-      
+     
+      - name: Force Module Map Emplacement
+        run: |
+          # Define the destination based on your error log
+          DEST_BASE="build/DerivedData/Build/Intermediates.noindex/ArchiveIntermediates/ProjectLightHouseReactApp/BuildProductsPath/Release-iphoneos"
+          
+          # List of modules failing in your log
+          MODULES=("ExpoModulesCore" "ExpoKeepAwake" "Expo")
+
+          for MOD in "${MODULES[@]}"; do
+            mkdir -p "$DEST_BASE/$MOD"
+            # Search the Pods directory for the actual modulemap
+            ACTUAL_MAP=$(find ios/Pods -name "$MOD.modulemap" | head -n 1)
+            
+            if [ -f "$ACTUAL_MAP" ]; then
+              cp "$ACTUAL_MAP" "$DEST_BASE/$MOD/$MOD.modulemap"
+              echo "✅ Emplaced $MOD.modulemap at $DEST_BASE/$MOD/"
+            else
+              echo "⚠️ Could not find $MOD.modulemap in ios/Pods"
+            fi
+          done
+          
       - name: Delete Failing Script Phases
         run: |
           gem install xcodeproj
@@ -442,6 +461,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
             SKIP_INSTALL=NO \
             SWIFT_COMPILATION_MODE=wholemodule \
             ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOLS=NO \
