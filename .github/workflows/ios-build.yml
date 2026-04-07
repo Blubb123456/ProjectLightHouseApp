@@ -487,8 +487,9 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
+            BUILD_LIBRARIES_FOR_DISTRIBUTION=YES \
             IBTOOL_FORCE_NOTICES=NO \
-            IBSC_OPTIONS=--no-warnings \
+            IBSC_OPTIONS="--no-warnings" \
             GCC_PRECOMPILE_PREFIX_HEADER=NO \
             INFOPLIST_ENABLE_STRICT_OUTPUT_FORMAT=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
