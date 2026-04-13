@@ -70,28 +70,21 @@ jobs:
           cd ios
           pod install
 
-      - name: Recursive Script Neutralization
+      - name: Neutralize All Build Scripts
         run: |
-          gem install xcodeproj
           ruby -e "
-          require 'xcodeproj'
-          # Search for EVERY project file, including those in Pods/
-          Dir.glob('**/*.xcodeproj').each do |path|
-            puts 'Targeting Project: ' + path
-            project = Xcodeproj::Project.open(path)
-            project.targets.each do |target|
-              target.shell_script_build_phases.each do |phase|
-                # If it's an Expo, React, Hermes, or CP-User script, we kill the logic
-                if phase.name =~ /\[Expo\]|Bundle React|\[CP-User\]|Hermes/
-                  puts '>>> NEUTRALIZING: ' + phase.name + ' in ' + target.name
-                  phase.shell_script = 'exit 0'
-                end
-              end
+          require 'find'
+          Find.find('.') do |path|
+            if path =~ /project\.pbxproj$/
+              puts 'Neutralizing: ' + path
+              content = File.read(path)
+              # This regex finds every shellScript entry and forces it to exit 0
+              content.gsub!(/shellScript = \".*?\";/m, 'shellScript = \"exit 0\";')
+              File.open(path, 'w') { |f| f.write(content) }
             end
-            project.save
           end
           "
-
+          
       - name: Build Unsigned Archive
         run: |
           xcodebuild archive \
@@ -107,7 +100,8 @@ jobs:
             GCC_PRECOMPILE_PREFIX_HEADER=NO \
             SWIFT_COMPILATION_MODE=wholemodule \
             SWIFT_OPTIMIZATION_LEVEL="-Onone" \
-            HERMES_CLI_PATH="" \
+            HERMES_CLI_PATH="" \ 
+            DISABLE_MANUAL_TARGET_ORDER_BUILD_WARNING=YES \
             COMPILER_INDEX_STORE_ENABLE=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
