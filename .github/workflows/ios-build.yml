@@ -115,24 +115,25 @@ jobs:
                           f.write(new_content)
           print("All scripts neutralized.")
 
-      - name: Force Emplace Module Maps
+      - name: Manual Module Map Emplacement
         run: |
-          # Define where Xcode is looking (from your error log)
-          DEST_BASE="build/DerivedData/Build/Intermediates.noindex/ArchiveIntermediates/ProjectLightHouseReactApp/BuildProductsPath/Release-iphoneos"
+          # The directory where Xcode 16.4 is looking for modules
+          DEST="build/DerivedData/Build/Intermediates.noindex/ArchiveIntermediates/ProjectLightHouseReactApp/BuildProductsPath/Release-iphoneos"
           
-          # List of modules failing in your log
+          # Modules listed in your error log
           MODULES=("EXConstants" "Expo" "ExpoAsset" "ExpoFileSystem" "ExpoFont" "ExpoImagePicker" "ExpoKeepAwake" "ExpoModulesCore")
 
           for MOD in "${MODULES[@]}"; do
-            mkdir -p "$DEST_BASE/$MOD"
-            # Search the Pods directory for the actual modulemap file
-            ACTUAL_MAP=$(find ios/Pods -name "$MOD.modulemap" | head -n 1)
+            echo "Searching for $MOD.modulemap..."
+            # Find the actual modulemap file in the Pods directory
+            MAP_PATH=$(find ios/Pods -name "$MOD.modulemap" | head -n 1)
             
-            if [ -f "$ACTUAL_MAP" ]; then
-              cp "$ACTUAL_MAP" "$DEST_BASE/$MOD/$MOD.modulemap"
-              echo "✅ Emplaced $MOD.modulemap"
+            if [ -n "$MAP_PATH" ]; then
+              mkdir -p "$DEST/$MOD"
+              cp "$MAP_PATH" "$DEST/$MOD/"
+              echo "✅ Placed $MOD.modulemap in $DEST/$MOD/"
             else
-              echo "⚠️ Could not find $MOD.modulemap in ios/Pods"
+              echo "⚠️ Warning: $MOD.modulemap not found in ios/Pods"
             fi
           done
           
@@ -150,6 +151,8 @@ jobs:
             INFOPLIST_ENABLE_EX_AUTO_LINK=NO \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
             GCC_PRECOMPILE_PREFIX_HEADER=NO \
+            CLANG_ENABLE_MODULES=YES \
+            HEADER_SEARCH_PATHS="$(PWD)/ios/Pods/Headers/Public/**" \
             SWIFT_COMPILATION_MODE=wholemodule \
             SWIFT_OPTIMIZATION_LEVEL="-Onone" \
             SKIP_INSTALL=NO \
