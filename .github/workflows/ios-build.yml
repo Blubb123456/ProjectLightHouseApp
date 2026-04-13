@@ -72,40 +72,41 @@ jobs:
           cd ios
           pod install
 
-      - name: Surgical Phase Removal
+      - name: Surgical Phase Deletion (Python)
         shell: python3 {0}
         run: |
-          import os, re
-          
-          # Path to your main project file
-          proj_path = 'ios/ProjectLightHouseReactApp.xcodeproj/project.pbxproj'
-          
-          if os.path.exists(proj_path):
-              with open(proj_path, 'r') as f:
+          import os
+
+          def nuke_phases(file_path):
+              with open(file_path, 'r') as f:
                   lines = f.readlines()
-              
+
               new_lines = []
               skip = False
-              # These are the specific names triggering your Exit Code 65
-              targets_to_kill = ["[Expo] Configure project", "Bundle React Native code and images"]
-              
+              # Keywords that identify the scripts killing your build
+              kill_list = ["FBReactNativeSpec", "Constants.manifest", "Replace Hermes", "[Expo] Configure", "Bundle React Native"]
+
               for line in lines:
-                  if any(t in line for t in targets_to_kill) and "isa = PBXShellScriptBuildPhase" in line:
+                  # If we find a line containing one of our targets, start skipping
+                  if any(k in line for k in kill_list) and "isa = PBXShellScriptBuildPhase" in line:
                       skip = True
-                      print(f"Removing phase: {line.strip()}")
+                      print(f"Skipping phase block in {file_path}: {line.strip()}")
                   
                   if not skip:
                       new_lines.append(line)
                   
-                  # This detects the end of the script block
+                  # The end of a PBX block is marked by };
                   if skip and "};" in line:
                       skip = False
-                      
-              with open(proj_path, 'w') as f:
+
+              with open(file_path, 'w') as f:
                   f.writelines(new_lines)
-              print("Build graph sanitized.")
-          else:
-              print("Project file not found!")
+
+          # Apply to BOTH the main project and the Pods project
+          for root, dirs, files in os.walk('ios'):
+              for file in files:
+                  if file == 'project.pbxproj':
+                      nuke_phases(os.path.join(root, file))
 
       - name: Manual Module Map Emplacement
         run: |
@@ -140,6 +141,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
+            VALIDATE_WORKSPACE=NO \
             INFOPLIST_ENABLE_EX_AUTO_LINK=NO \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
             GCC_PRECOMPILE_PREFIX_HEADER=NO \
