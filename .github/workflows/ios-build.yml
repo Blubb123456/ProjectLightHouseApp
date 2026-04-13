@@ -114,7 +114,27 @@ jobs:
                       with open(file_path, 'w') as f:
                           f.write(new_content)
           print("All scripts neutralized.")
-     
+
+      - name: Force Emplace Module Maps
+        run: |
+          # Define where Xcode is looking (from your error log)
+          DEST_BASE="build/DerivedData/Build/Intermediates.noindex/ArchiveIntermediates/ProjectLightHouseReactApp/BuildProductsPath/Release-iphoneos"
+          
+          # List of modules failing in your log
+          MODULES=("EXConstants" "Expo" "ExpoAsset" "ExpoFileSystem" "ExpoFont" "ExpoImagePicker" "ExpoKeepAwake" "ExpoModulesCore")
+
+          for MOD in "${MODULES[@]}"; do
+            mkdir -p "$DEST_BASE/$MOD"
+            # Search the Pods directory for the actual modulemap file
+            ACTUAL_MAP=$(find ios/Pods -name "$MOD.modulemap" | head -n 1)
+            
+            if [ -f "$ACTUAL_MAP" ]; then
+              cp "$ACTUAL_MAP" "$DEST_BASE/$MOD/$MOD.modulemap"
+              echo "✅ Emplaced $MOD.modulemap"
+            else
+              echo "⚠️ Could not find $MOD.modulemap in ios/Pods"
+            fi
+          done
           
       - name: Build Unsigned Archive
         run: |
@@ -133,6 +153,7 @@ jobs:
             SWIFT_COMPILATION_MODE=wholemodule \
             SWIFT_OPTIMIZATION_LEVEL="-Onone" \
             SKIP_INSTALL=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
