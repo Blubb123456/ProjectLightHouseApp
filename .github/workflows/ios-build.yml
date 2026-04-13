@@ -67,14 +67,28 @@ jobs:
       
       - name: Force Clean Prebuild
         run: |
-          # Physically remove the corrupted folders to force a clean generation
+          # Ensure we are starting fresh
           rm -rf ios
-          npx expo prebuild --platform ios --clean --no-install
-      
+          # Generate the ios folder - DO NOT use --no-install if you need the project ready immediately
+          npx expo prebuild --platform ios --template blank
+
+      - name: Verify iOS Folder Exists
+        run: ls -R ios | head -n 20 # This will log the folder structure so we can see it in the GHA logs
+
       - name: Install Pods
         run: |
-          cd ios
-          pod install
+          # Use the -C flag or check existence first to prevent the crash
+          if [ -d "ios" ]; then
+            cd ios && pod install
+          else
+            echo "ERROR: iOS directory was not generated!"
+            exit 1
+          fi
+      
+      #- name: Install Pods
+        #run: |
+          #cd ios
+         # pod install
 
      # - name: Neutralize All Build Scripts
         #run: |
