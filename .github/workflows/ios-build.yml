@@ -72,48 +72,40 @@ jobs:
           cd ios
           pod install
 
-      - name: Neutralize All Build Scripts
-        run: |
-          ruby -e "
-          require 'find'
-          Find.find('.') do |path|
-            if path =~ /project\.pbxproj$/
-              puts 'Neutralizing: ' + path
-              content = File.read(path)
-              # This regex finds every shellScript entry and forces it to exit 0
-              content.gsub!(/shellScript = \".*?\";/m, 'shellScript = \"exit 0\";')
-              File.open(path, 'w') { |f| f.write(content) }
-            end
-          end
-          "
-      - name: Neutralize Build Scripts (Python)
+      - name: Surgical Phase Removal
         shell: python3 {0}
         run: |
-          import os
-          import re
-
-          # Find every pbxproj file in the ios directory
-          for root, dirs, files in os.walk('ios'):
-              for file in files:
-                  if file == 'project.pbxproj':
-                      file_path = os.path.join(root, file)
-                      print(f"Neutralizing scripts in: {file_path}")
+          import os, re
+          
+          # Path to your main project file
+          proj_path = 'ios/ProjectLightHouseReactApp.xcodeproj/project.pbxproj'
+          
+          if os.path.exists(proj_path):
+              with open(proj_path, 'r') as f:
+                  lines = f.readlines()
+              
+              new_lines = []
+              skip = False
+              # These are the specific names triggering your Exit Code 65
+              targets_to_kill = ["[Expo] Configure project", "Bundle React Native code and images"]
+              
+              for line in lines:
+                  if any(t in line for t in targets_to_kill) and "isa = PBXShellScriptBuildPhase" in line:
+                      skip = True
+                      print(f"Removing phase: {line.strip()}")
+                  
+                  if not skip:
+                      new_lines.append(line)
+                  
+                  # This detects the end of the script block
+                  if skip and "};" in line:
+                      skip = False
                       
-                      with open(file_path, 'r') as f:
-                          content = f.read()
-
-                      # This regex finds the shellScript content and replaces it with 'exit 0'
-                      # It handles multi-line scripts and escapes properly.
-                      new_content = re.sub(
-                          r'shellScript = \".*?\";', 
-                          'shellScript = \"exit 0\";', 
-                          content, 
-                          flags=re.DOTALL
-                      )
-
-                      with open(file_path, 'w') as f:
-                          f.write(new_content)
-          print("All scripts neutralized.")
+              with open(proj_path, 'w') as f:
+                  f.writelines(new_lines)
+              print("Build graph sanitized.")
+          else:
+              print("Project file not found!")
 
       - name: Manual Module Map Emplacement
         run: |
