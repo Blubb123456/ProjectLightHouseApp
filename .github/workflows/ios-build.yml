@@ -21,7 +21,7 @@ jobs:
       - name: Generate iOS Folder (Prebuild)
         run: npx expo prebuild --platform ios --clean --no-install
 
-      - name: Patch Podfile and Disable Bundle Script
+      - name: Write Optimized Podfile
         run: |
           cd ios
           cat <<'EOF' > Podfile
@@ -45,490 +45,43 @@ jobs:
             post_install do |installer|
               installer.pods_project.targets.each do |target|
                 target.build_configurations.each do |config|
-                  # Force the build settings that Xcode 16.4 is tripping over
                   config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
                   config.build_settings['GCC_PRECOMPILE_PREFIX_HEADER'] = 'NO'
-                  config.build_settings['ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOLS'] = 'NO'
-                  config.build_settings['ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS'] = 'NO'
                   config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
                   config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-                end
-              end
-              
-              installer.aggregate_targets.each do |target|
-                target.user_project.build_configurations.each do |config|
-                  config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-                  config.build_settings['GCC_PRECOMPILE_PREFIX_HEADER'] = 'NO'
-                end
-                target.user_project.save
-              end
-            end
-          end
-          EOF
-          # Run the ruby script to actually modify the file
-          ruby pod_patch.rb
-      
-      - name: Force Node Link for Xcode
-        run: sudo ln -sf $(which node) /usr/local/bin/node
-
-      - name: Force Node Symlink
-        run: sudo ln -sf $(which node) /usr/local/bin/node
-
-      - name: Dynamic Podfile Overwrite
-        run: |
-          cd ios
-          cat <<'EOF' > Podfile
-          require_relative '../node_modules/expo/scripts/autolinking'
-          require_relative '../node_modules/react-native/scripts/react_native_pods'
-
-          platform :ios, '15.1'
-          install! 'cocoapods', :deterministic_uuids => false
-
-          target 'ProjectLightHouseReactApp' do
-            use_expo_modules!
-            config = use_native_modules!
-
-            use_react_native!(
-              :path => config[:reactNativePath],
-              :hermes_enabled => true,
-              :fabric_enabled => false,
-              :new_arch_enabled => false # Explicitly kill the dependency provider
-            )
-
-            post_install do |installer|
-              installer.pods_project.targets.each do |target|
-                target.build_configurations.each do |config|
-                  # Force module definitions and bypass sandboxing
-                  # Disable PCH to match the main archive command
-                  config.build_settings['GCC_PRECOMPILE_PREFIX_HEADER'] = 'NO'
-                  config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
                   config.build_settings['DEFINES_MODULE'] = 'YES'
-                  config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-                  config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
-                  config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
-                  # Stop ibtool from crashing on pod storyboards
-                  config.build_settings['IBTOOL_FORCE_NOTICES'] = 'NO'
                 end
               end
               
-              # Kill sandboxing at the project level
               installer.aggregate_targets.each do |target|
                 target.user_project.build_configurations.each do |config|
                   config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
                   config.build_settings['GCC_PRECOMPILE_PREFIX_HEADER'] = 'NO'
+                  config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
                 end
                 target.user_project.save
               end
             end
           end
           EOF
-      
+
       - name: Install Pods
         run: |
           cd ios
           pod install
-
-      - name: Absolute Phase Deletion
-        run: |
-          gem install xcodeproj
-          ruby -e "
-          require 'xcodeproj'
-          # Check every .xcodeproj in the ios directory
-          Dir.glob('ios/*.xcodeproj').each do |path|
-            puts \"Cleaning project: #{path}\"
-            project = Xcodeproj::Project.open(path)
-            project.targets.each do |target|
-              target.shell_script_build_phases.delete_if do |phase|
-                match = ['[Expo] Configure project', 'Bundle React Native code and images'].include?(phase.name)
-                puts \"  Deleted #{phase.name} from #{target.name}\" if match
-                match
-              end
-            end
-            project.save
-          end
-          "
-          
-      - name: Delete Failing Script Phases
-        run: |
-          gem install xcodeproj
-          ruby -e "
-          require 'xcodeproj'
-          project_path = Dir.glob('ios/*.xcodeproj').first
-          project = Xcodeproj::Project.open(project_path)
-          project.targets.each do |target|
-            target.shell_script_build_phases.delete_if do |phase|
-              ['[Expo] Configure project', 'Bundle React Native code and images'].include?(phase.name)
-            end
-          end
-          project.save
-          "
 
       - name: Surgical Phase Deletion
         run: |
           gem install xcodeproj
           ruby -e "
           require 'xcodeproj'
-          # Search everywhere for xcodeproj files
           Dir.glob('**/*.xcodeproj').each do |path|
-            puts \"Opening Project: #{path}\"
-            project = Xcodeproj::Project.open(path)
-            project.targets.each do |target|
-              puts \"  Checking Target: #{target.name}\"
-              target.shell_script_build_phases.delete_if do |phase|
-                # Case-insensitive partial match to catch '[Expo] Configure' or 'Bundle React...'
-                name = phase.name || ''
-                if name.downcase.include?('expo') || name.downcase.include?('bundle')
-                  puts \"  >>> DELETED: #{name} from #{target.name}\"
-                  true
-                else
-                  false
-                end
-              end
-            end
-            project.save
-          end
-          "
-     
-      - name: Force Module Map Emplacement
-        run: |
-          # Define the destination based on your error log
-          DEST_BASE="build/DerivedData/Build/Intermediates.noindex/ArchiveIntermediates/ProjectLightHouseReactApp/BuildProductsPath/Release-iphoneos"
-          
-          # List of modules failing in your log
-          MODULES=("ExpoModulesCore" "ExpoKeepAwake" "Expo")
-
-          for MOD in "${MODULES[@]}"; do
-            mkdir -p "$DEST_BASE/$MOD"
-            # Search the Pods directory for the actual modulemap
-            ACTUAL_MAP=$(find ios/Pods -name "$MOD.modulemap" | head -n 1)
-            
-            if [ -f "$ACTUAL_MAP" ]; then
-              cp "$ACTUAL_MAP" "$DEST_BASE/$MOD/$MOD.modulemap"
-              echo "✅ Emplaced $MOD.modulemap at $DEST_BASE/$MOD/"
-            else
-              echo "⚠️ Could not find $MOD.modulemap in ios/Pods"
-            fi
-          done
-      - name: Force Script Deletion
-        run: |
-          gem install xcodeproj
-          ruby -e "
-          require 'xcodeproj'
-          Dir.glob('**/*.xcodeproj').each do |path|
-            project = Xcodeproj::Project.open(path)
-            project.targets.each do |target|
-              target.build_phases.delete_if do |phase|
-                if phase.respond_to?(:name) && (phase.name =~ /\[Expo\]|Bundle React Native/)
-                  puts '>>> DESTROYED PHASE: ' + phase.name
-                  true
-                else
-                  false
-                end
-              end
-            end
-            project.save
-          end
-          "    
-      - name: Delete Failing Script Phases
-        run: |
-          gem install xcodeproj
-          ruby -e "
-          require 'xcodeproj'
-          project_path = Dir.glob('ios/*.xcodeproj').first
-          project = Xcodeproj::Project.open(project_path)
-          project.targets.each do |target|
-            target.shell_script_build_phases.delete_if do |phase|
-              ['[Expo] Configure project', 'Bundle React Native code and images'].include?(phase.name)
-            end
-          end
-          project.save
-          "
-
-      - name: Surgical Build Phase Deletion
-        run: |
-          gem install xcodeproj
-          ruby -e "
-          require 'xcodeproj'
-          project_path = Dir.glob('ios/*.xcodeproj').first
-          project = Xcodeproj::Project.open(project_path)
-          
-          project.targets.each do |target|
-            target.shell_script_build_phases.delete_if do |phase|
-              # Targets the exact phases in your Code 65 log
-              ['[Expo] Configure project', 'Bundle React Native code and images'].include?(phase.name)
-            end
-          end
-          
-          project.save
-          "
-
-      - name: Hard-Delete Build Phases
-        run: |
-          gem install xcodeproj
-          ruby -e "
-          require 'xcodeproj'
-          project_path = Dir.glob('ios/*.xcodeproj').first
-          project = Xcodeproj::Project.open(project_path)
-          
-          project.targets.each do |target|
-            target.shell_script_build_phases.delete_if do |phase|
-              # This targets the exact names in your error log
-              ['[Expo] Configure project', 'Bundle React Native code and images'].include?(phase.name)
-            end
-          end
-          
-          project.save
-          "
-     
-      - name: Global Shell Script Neutralization
-        shell: python3 {0}
-        run: |
-          import os
-          import re
-
-          # Find the main project file and the Pods project file
-          project_files = []
-          for root, dirs, files in os.walk('ios'):
-              if root.endswith('.xcodeproj'):
-                  project_files.append(os.path.join(root, 'project.pbxproj'))
-
-          for proj_path in project_files:
-              print(f"Neutralizing all shell scripts in {proj_path}")
-              with open(proj_path, 'r') as f:
-                  content = f.read()
-
-              # This regex targets the shellScript attribute of ANY PBXShellScriptBuildPhase
-              # It replaces the actual command with 'exit 0'
-              content = re.sub(
-                  r'(shellScript = ").*?(";)',
-                  r'\1exit 0\2',
-                  content,
-                  flags=re.DOTALL
-              )
-
-              with open(proj_path, 'w') as f:
-                  f.write(content)
-          print("All scripts neutralized.")
-
-      - name: Kill Hermes and Bundle Scripts
-        shell: python3 {0}
-        run: |
-          import os
-          import re
-
-          proj_path = next((os.path.join(root, 'project.pbxproj') for root, _, files in os.walk('ios') if root.endswith('.xcodeproj')), None)
-          
-          if proj_path:
-              print(f"Neutralizing failing phases in {proj_path}")
-              with open(proj_path, 'r') as f:
-                  content = f.read()
-
-              # 1. Neutralize the exact Hermes script that just failed
-              content = re.sub(
-                  r'(name = "\[CP-User\] \[Hermes\] Replace Hermes.*?shellScript = ").*?(";)',
-                  r'\1exit 0\2',
-                  content,
-                  flags=re.DOTALL
-              )
-
-              # 2. Neutralize the Bundle script (backup for the Podfile patch)
-              content = re.sub(
-                  r'(name = "Bundle React Native code and images";.*?shellScript = ").*?(";)',
-                  r'\1exit 0\2',
-                  content,
-                  flags=re.DOTALL
-              )
-
-              with open(proj_path, 'w') as f:
-                  f.write(content)
-              print("Scripts neutralized.")
-
-      - name: Physically Purge Failing Phases
-        shell: python3 {0}
-        run: |
-          import os
-          # Find the pbxproj
-          proj_path = next((os.path.join(root, 'project.pbxproj') for root, _, files in os.walk('ios') if root.endswith('.xcodeproj')), None)
-          
-          if proj_path:
-              print(f"Purging phases from {proj_path}")
-              with open(proj_path, 'r') as f:
-                  lines = f.readlines()
-              
-              new_lines = []
-              skip = False
-              for line in lines:
-                  # Detect the start of the failing phases
-                  if ('Bundle React Native code' in line or '[Hermes] Replace Hermes' in line) and 'isa = PBXShellScriptBuildPhase' in line:
-                      skip = True
-                      print(f"Removing phase: {line.strip()}")
-                  
-                  if not skip:
-                      new_lines.append(line)
-                  
-                  # Stop skipping once the phase block ends (usually indicated by };)
-                  if skip and '};' in line:
-                      skip = False
-              
-              with open(proj_path, 'w') as f:
-                  f.writelines(new_lines)
-              print("Cleanup complete.")
-
-      - name: Force Node Symlink
-        run: sudo ln -sf $(which node) /usr/local/bin/node
-      
-      - name: Hard Purge Build Phases
-        shell: python3 {0}
-        run: |
-          import os
-          proj_path = next((os.path.join(root, 'project.pbxproj') for root, _, files in os.walk('ios') if root.endswith('.xcodeproj')), None)
-          if proj_path:
-              print(f"Purging phases from {proj_path}")
-              with open(proj_path, 'r') as f:
-                  lines = f.readlines()
-              
-              new_lines = []
-              skip = False
-              for line in lines:
-                  # Detect the start of the failing phases
-                  if ('Bundle React Native code' in line or '[Hermes] Replace Hermes' in line) and 'isa = PBXShellScriptBuildPhase' in line:
-                      skip = True
-                      print(f"Removing phase: {line.strip()}")
-                  
-                  if not skip:
-                      new_lines.append(line)
-                  
-                  # Stop skipping once the phase block ends
-                  if skip and '};' in line:
-                      skip = False
-              
-              with open(proj_path, 'w') as f:
-                  f.writelines(new_lines)
-
-      - name: Physically Purge Failing Phases
-        shell: python3 {0}
-        run: |
-          import os
-          proj_path = next((os.path.join(root, 'project.pbxproj') for root, _, files in os.walk('ios') if root.endswith('.xcodeproj')), None)
-          if proj_path:
-              with open(proj_path, 'r') as f:
-                  lines = f.readlines()
-              with open(proj_path, 'w') as f:
-                  skip = False
-                  for line in lines:
-                      # If we hit the start of the Bundle or Hermes phases, start skipping
-                      if ('Bundle React Native code' in line or '[Hermes] Replace Hermes' in line) and 'isa = PBXShellScriptBuildPhase' in line:
-                          skip = True
-                      # Stop skipping once we hit the end of that specific phase block
-                      if skip and '};' in line:
-                          skip = False
-                          continue 
-                      if not skip:
-                          f.write(line)
-              print("Phases physically removed from project metadata.")
-
-      - name: Pre-generate ExpoModulesProvider
-        run: |
-          mkdir -p ios/Pods/Target\ Support\ Files/Pods-ProjectLightHouseReactApp/
-          cat <<'EOF' > ios/Pods/Target\ Support\ Files/Pods-ProjectLightHouseReactApp/ExpoModulesProvider.swift
-          import ExpoModulesCore
-
-          @objc(ExpoModulesProvider)
-          public class ExpoModulesProvider: ModulesProvider {
-            public override func getModuleClasses() -> [AnyModule.Type] {
-              return []
-            }
-          }
-          EOF
-      
-      - name: Pre-generate ExpoModulesProvider
-        run: |
-          mkdir -p ios/Pods/Target\ Support\ Files/Pods-ProjectLightHouseReactApp/
-          cat <<'EOF' > ios/Pods/Target\ Support\ Files/Pods-ProjectLightHouseReactApp/ExpoModulesProvider.swift
-          import ExpoModulesCore
-
-          @objc(ExpoModulesProvider)
-          public class ExpoModulesProvider: ModulesProvider {
-            public override func getModuleClasses() -> [AnyModule.Type] {
-              return []
-            }
-          }
-          EOF
-
-      - name: Delete Failing Script Phases
-        run: |
-          gem install xcodeproj
-          ruby -e "
-          require 'xcodeproj'
-          project_path = Dir.glob('ios/*.xcodeproj').first
-          project = Xcodeproj::Project.open(project_path)
-          project.targets.each do |target|
-            target.shell_script_build_phases.delete_if do |phase|
-              ['[Expo] Configure project', 'Bundle React Native code and images'].include?(phase.name)
-            end
-          end
-          project.save
-          "
-
-      - name: Force Module Map Path
-        run: |
-          MODULE_DEST="build/DerivedData/Build/Intermediates.noindex/ArchiveIntermediates/ProjectLightHouseReactApp/BuildProductsPath/Release-iphoneos/ExpoModulesCore"
-          mkdir -p "$MODULE_DEST"
-          
-          # Find the actual modulemap generated by CocoaPods and link it
-          ACTUAL_MAP=$(find ios/Pods -name "ExpoModulesCore.modulemap" | head -n 1)
-          if [ -f "$ACTUAL_MAP" ]; then
-            cp "$ACTUAL_MAP" "$MODULE_DEST/ExpoModulesCore.modulemap"
-            echo "Module map emplaced at $MODULE_DEST"
-          else
-            echo "Warning: Could not find source modulemap"
-          fi
-          
-      - name: Manual JS Bundle Generation
-        run: |
-          # Install the specific modules the Metro graph needs to resolve
-          npm install @expo/metro-config @react-native/metro-config @tensorflow/tfjs @tensorflow/tfjs-react-native expo-asset expo-file-system expo-constants expo-image-picker --save-dev
-          
-          rm -rf ios/main.jsbundle
-          mkdir -p ios
-          export NODE_BINARY=$(which node)
-          
-          npx react-native bundle \
-            --platform ios \
-            --dev false \
-            --entry-file index.js \
-            --bundle-output ios/main.jsbundle \
-            --assets-dest ios \
-            --reset-cache
-
-      - name: Deep Clean Build Folders
-        run: |
-          rm -rf ios/build
-          rm -rf ~/Library/Developer/Xcode/DerivedData/*
-          xcodebuild clean -workspace ios/*.xcworkspace -scheme ProjectLightHouseReactApp -configuration Release
-
-      - name: Manual Module Map Symlinking
-        run: |
-          MAP_DIR="build/DerivedData/Build/Intermediates.noindex/ArchiveIntermediates/ProjectLightHouseReactApp/BuildProductsPath/Release-iphoneos"
-          mkdir -p "$MAP_DIR/ExpoModulesCore"
-          mkdir -p "$MAP_DIR/ExpoKeepAwake"
-          
-          # Link the maps from the Pods directory to the expected BuildProductsPath
-          find ios/Pods -name "ExpoModulesCore.modulemap" -exec cp {} "$MAP_DIR/ExpoModulesCore/" \;
-          find ios/Pods -name "ExpoKeepAwake.modulemap" -exec cp {} "$MAP_DIR/ExpoKeepAwake/" \;
-          echo "Module maps manually synchronized."
-      - name: Force Script Deletion (Inline)
-        run: |
-          gem install xcodeproj
-          ruby -e "
-          require 'xcodeproj'
-          Dir.glob('**/*.xcodeproj').each do |path|
-            puts 'Opening Project: ' + path
+            puts 'Cleaning project: ' + path
             project = Xcodeproj::Project.open(path)
             project.targets.each do |target|
               target.shell_script_build_phases.delete_if do |phase|
                 if phase.respond_to?(:name) && (phase.name =~ /\[Expo\]|Bundle React Native/)
-                  puts '>>> DESTROYED PHASE: ' + phase.name + ' from ' + target.name
+                  puts '>>> DELETED: ' + phase.name + ' from ' + target.name
                   true
                 else
                   false
@@ -538,10 +91,9 @@ jobs:
             project.save
           end
           "
+
       - name: Build Unsigned Archive
         run: |
-          WORKSPACE_PATH=$(find . -name "*.xcworkspace" | head -1)
-          SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
           xcodebuild archive \
             -workspace ios/ProjectLightHouseReactApp.xcworkspace \
             -scheme ProjectLightHouseReactApp \
@@ -551,10 +103,8 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
-            FUSE_BUILD_SCRIPT_PHASES=YES \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
             GCC_PRECOMPILE_PREFIX_HEADER=NO \
-            ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOLS=NO \
             SWIFT_COMPILATION_MODE=wholemodule \
             SWIFT_OPTIMIZATION_LEVEL="-Onone" \
             COMPILER_INDEX_STORE_ENABLE=NO \
@@ -562,19 +112,11 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
             SKIP_BUNDLING=YES
-            
-      
+
       - name: Package into IPA
         run: |
           mkdir -p build/Payload
-          # Search more broadly for the .app file inside the archive
           APP_PATH=$(find build/ProjectLighthouse.xcarchive -name "*.app" | head -1)
-          
-          if [ -z "$APP_PATH" ]; then
-            echo "ERROR: No .app file found. The build likely failed."
-            exit 1
-          fi
-          
           cp -r "$APP_PATH" build/Payload/
           cd build
           zip -r ProjectLighthouse.ipa Payload
