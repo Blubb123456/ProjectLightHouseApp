@@ -84,7 +84,19 @@ jobs:
             end
           end
           "
-          
+      - name: Hard-Kill Script Phases (Bash)
+        run: |
+          # Find all project files
+          find . -name "project.pbxproj" | while read -r proj; do
+            echo "Nuking Expo scripts in $proj"
+            # Use sed to find the Expo/Bundle script blocks and delete them
+            # This looks for the start of the block and deletes until the closing };
+            sed -i '' '/\[Expo\] Configure project/,/};/d' "$proj"
+            sed -i '' '/Bundle React Native code and images/,/};/d' "$proj"
+            # Also force sandboxing off at the text level
+            sed -i '' 's/ENABLE_USER_SCRIPT_SANDBOXING = YES/ENABLE_USER_SCRIPT_SANDBOXING = NO/g' "$proj"
+          done   
+     
       - name: Build Unsigned Archive
         run: |
           xcodebuild archive \
@@ -96,6 +108,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
+            INFOPLIST_ENABLE_EX_AUTO_LINK=NO \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
             GCC_PRECOMPILE_PREFIX_HEADER=NO \
             SWIFT_COMPILATION_MODE=wholemodule \
