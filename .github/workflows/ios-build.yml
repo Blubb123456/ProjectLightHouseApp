@@ -84,10 +84,16 @@ jobs:
               new_lines = []
               skip = False
               # Keywords that identify the scripts killing your build
-              kill_list = ["FBReactNativeSpec", "Constants.manifest", "Replace Hermes", "[Expo] Configure", "Bundle React Native"]
+              kill_list = [
+                  "FBReactNativeSpec", 
+                  "Constants.manifest", 
+                  "Replace Hermes", 
+                  "[Expo] Configure", 
+                  "Bundle React Native"
+              ]
 
               for line in lines:
-                  # If we find a line containing one of our targets, start skipping
+                  # If we find a line containing one of our targets, start skipping the block
                   if any(k in line for k in kill_list) and "isa = PBXShellScriptBuildPhase" in line:
                       skip = True
                       print(f"Skipping phase block in {file_path}: {line.strip()}")
@@ -95,18 +101,19 @@ jobs:
                   if not skip:
                       new_lines.append(line)
                   
-                  # The end of a PBX block is marked by };
+                  # The end of a PBX block is marked by }; - stop skipping once we hit it
                   if skip and "};" in line:
                       skip = False
 
               with open(file_path, 'w') as f:
                   f.writelines(new_lines)
 
-          # Apply to BOTH the main project and the Pods project
+          # CRITICAL: Apply this to the main project AND the Pods project
           for root, dirs, files in os.walk('ios'):
               for file in files:
                   if file == 'project.pbxproj':
                       nuke_phases(os.path.join(root, file))
+          print("Build graph sanitized.")
 
       - name: Manual Module Map Emplacement
         run: |
