@@ -18,8 +18,8 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
-      - name: Generate iOS Folder (Prebuild)
-        run: npx expo prebuild --platform ios --clean --no-install
+      #- name: Generate iOS Folder (Prebuild)
+        #run: npx expo prebuild --platform ios --clean --no-install
 
       - name: Write Optimized Podfile
         run: |
@@ -64,50 +64,76 @@ jobs:
             end
           end
           EOF
-
+      
+      - name: Force Clean Prebuild
+        run: |
+          # Physically remove the corrupted folders to force a clean generation
+          rm -rf ios
+          npx expo prebuild --platform ios --clean --no-install
+      
       - name: Install Pods
         run: |
           cd ios
           pod install
 
-      - name: Neutralize All Build Scripts
-        run: |
-          ruby -e "
-          require 'find'
-          Find.find('.') do |path|
-            if path =~ /project\.pbxproj$/
-              puts 'Neutralizing: ' + path
-              content = File.read(path)
+     # - name: Neutralize All Build Scripts
+        #run: |
+         # ruby -e "
+         # require 'find'
+         # Find.find('.') do |path|
+          #  if path =~ /project\.pbxproj$/
+            #  puts 'Neutralizing: ' + path
+           #   content = File.read(path)
               # This regex finds every shellScript entry and forces it to exit 0
-              content.gsub!(/shellScript = \".*?\";/m, 'shellScript = \"exit 0\";')
-              File.open(path, 'w') { |f| f.write(content) }
-            end
-          end
-          "
-      - name: Safe Surgical Phase Removal
-        run: |
-          gem install xcodeproj
-          ruby -e "
-          require 'xcodeproj'
+            #  content.gsub!(/shellScript = \".*?\";/m, 'shellScript = \"exit 0\";')
+             # File.open(path, 'w') { |f| f.write(content) }
+           # end
+         # end
+         # "
+     # - name: Safe Surgical Phase Removal
+       # run: |
+        #  gem install xcodeproj
+        #  ruby -e "
+         # require 'xcodeproj'
           # Search all projects including Pods
-          Dir.glob('**/*.xcodeproj').each do |path|
-            puts 'Opening: ' + path
-            project = Xcodeproj::Project.open(path)
-            project.targets.each do |target|
+         # Dir.glob('**/*.xcodeproj').each do |path|
+           # puts 'Opening: ' + path
+           # project = Xcodeproj::Project.open(path)
+           # project.targets.each do |target|
               # Safely delete only the specific shell script phases causing the hang
-              target.shell_script_build_phases.delete_if do |phase|
-                if phase.name =~ /\[Expo\]|Bundle React|\[CP-User\]|Hermes/
-                  puts '>>> Removed: ' + phase.name + ' from ' + target.name
-                  true
-                else
-                  false
-                end
-              end
-            end
-            project.save
-          end
-          "  
-     
+             # target.shell_script_build_phases.delete_if do |phase|
+              #  if phase.name =~ /\[Expo\]|Bundle React|\[CP-User\]|Hermes/
+              #    puts '>>> Removed: ' + phase.name + ' from ' + target.name
+                #  true
+               # else
+                #  false
+               # end
+             # end
+           # end
+           # project.save
+         # end
+          #"  
+      - name: Surgical Script Neutralization (Fixed Regex)
+        run: |
+          # Use a python script because it handles multi-line regex much safer than sed/ruby
+          python3 -c "
+          import os, re
+          for root, dirs, files in os.walk('ios'):
+              for file in files:
+                  if file == 'project.pbxproj':
+                      path = os.path.join(root, file)
+                      print(f'Fixing {path}')
+                      with open(path, 'r') as f:
+                          content = f.read()
+                      
+                      # Safely replace the entire shellScript content with just 'exit 0'
+                      # This targets the shellScript attribute specifically and cleans it
+                      content = re.sub(r'shellScript = \".*?\";', 'shellScript = \"exit 0\";', content, flags=re.DOTALL)
+                      
+                      with open(path, 'w') as f:
+                          f.write(content)
+          "
+          
       - name: Build Unsigned Archive
         run: |
           xcodebuild archive \
