@@ -72,7 +72,7 @@ jobs:
           cd ios
           pod install
 
-      - name: Surgical Phase Removal (Python)
+      - name: Deep Clean Build Graph (Python)
         shell: python3 {0}
         run: |
           import os, re
@@ -81,37 +81,27 @@ jobs:
               with open(file_path, 'r') as f:
                   content = f.read()
 
-              # 1. Identify the GUIDs of the problematic scripts
-              # We look for the lines that define these phases
-              kill_list = [
-                  "FBReactNativeSpec", 
-                  "Constants.manifest", 
-                  "Replace Hermes", 
-                  "[Expo] Configure project", 
-                  "Bundle React Native code and images"
-              ]
+              # 1. Identify all ShellScript GUIDs
+              # This regex finds the unique 24-character hex ID for every ShellScript phase
+              script_guids = re.findall(r'([A-F0-9]{24}) /\* (?:\[CP-User\]|\[Expo\]|Bundle React|Hermes|Check FBReactNativeSpec)', content)
               
-              guids = []
-              for item in kill_list:
-                  # Matches: GUID /* Item Name */
-                  found = re.findall(r'([A-F0-9]{24}) /\* ' + re.escape(item), content)
-                  guids.extend(found)
-
-              if not guids:
-                  print(f"No target phases found in {file_path}")
+              if not script_guids:
+                  print(f"No problematic scripts found in {file_path}")
                   return
 
-              # 2. Remove those GUID references from the buildPhases lists
-              for guid in guids:
-                  print(f"Removing GUID {guid} from build graph...")
-                  content = content.replace(f"\t\t\t\t{guid} /* */,\n", "")
-                  content = content.replace(f"\t\t\t\t{guid},\n", "")
-                  # Also nuke the actual definition block
-                  content = re.sub(r'' + guid + r' /\* .*? \*/ = \{.*? \};', '', content, flags=re.DOTALL)
+              print(f"Found {len(script_guids)} scripts to remove from {file_path}")
+
+              # 2. Remove the GUIDs from the buildPhases list of every target
+              for guid in script_guids:
+                  # Remove the reference in the target buildPhases
+                  content = re.sub(r'^\s+' + guid + r' /\* .*? \*/,\n', '', content, flags=re.MULTILINE)
+                  # Remove the actual script definition block
+                  content = re.sub(r'^\s+' + guid + r' /\* .*? \*/ = \{.*? \};\n', '', content, flags=re.DOTALL | re.MULTILINE)
 
               with open(file_path, 'w') as f:
                   f.write(content)
 
+          # Apply this to the main app AND the Pods project
           for root, dirs, files in os.walk('ios'):
               for file in files:
                   if file == 'project.pbxproj':
@@ -150,6 +140,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
+            ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS=NO \
             GENERATE_INFOPLIST_FILE=YES \
             CLANG_ENABLE_MODULE_DEBUGGING=NO \
             VALIDATE_WORKSPACE=NO \
