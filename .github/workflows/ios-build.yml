@@ -72,49 +72,33 @@ jobs:
           cd ios
           pod install
 
-      - name: Surgical Phase Deletion (Python)
+      - name: Global Script Wipeout (Python)
         shell: python3 {0}
         run: |
-          import os
+          import os, re
 
-          def nuke_phases(file_path):
+          def total_wipeout(file_path):
               with open(file_path, 'r') as f:
-                  lines = f.readlines()
+                  content = f.read()
 
-              new_lines = []
-              skip = False
-              # Keywords that identify the scripts killing your build
-              kill_list = [
-                  "FBReactNativeSpec", 
-                  "Constants.manifest", 
-                  "Replace Hermes", 
-                  "[Expo] Configure", 
-                  "Bundle React Native"
-              ]
-
-              for line in lines:
-                  # If we find a line containing one of our targets, start skipping the block
-                  if any(k in line for k in kill_list) and "isa = PBXShellScriptBuildPhase" in line:
-                      skip = True
-                      print(f"Skipping phase block in {file_path}: {line.strip()}")
-                  
-                  if not skip:
-                      new_lines.append(line)
-                  
-                  # The end of a PBX block is marked by }; - stop skipping once we hit it
-                  if skip and "};" in line:
-                      skip = False
+              # This regex identifies the entire ShellScript section and empties it
+              # while keeping the file structure valid for Xcode.
+              # It finds everything between the Start and End comments for ShellScripts.
+              pattern = r'/\* Begin PBXShellScriptBuildPhase section \*/.*?/\* End PBXShellScriptBuildPhase section \*/'
+              replacement = '/* Begin PBXShellScriptBuildPhase section */\n/* End PBXShellScriptBuildPhase section */'
+              
+              new_content = re.sub(pattern, replacement, content, flags=re.DOTALL)
 
               with open(file_path, 'w') as f:
-                  f.writelines(new_lines)
+                  f.write(new_content)
 
-          # CRITICAL: Apply this to the main project AND the Pods project
+          # Apply to every single pbxproj in the ios folder (Main and Pods)
           for root, dirs, files in os.walk('ios'):
               for file in files:
                   if file == 'project.pbxproj':
-                      nuke_phases(os.path.join(root, file))
-          print("Build graph sanitized.")
-
+                      print(f"Purging all scripts from: {os.path.join(root, file)}")
+                      total_wipeout(os.path.join(root, file))
+     
       - name: Manual Module Map Emplacement
         run: |
           # The directory where Xcode 16.4 is looking for modules
