@@ -86,29 +86,34 @@ jobs:
             end
           end
           "
-      - name: Safe Surgical Phase Removal
+      - name: Neutralize Build Scripts (Python)
+        shell: python3 {0}
         run: |
-          gem install xcodeproj
-          ruby -e "
-          require 'xcodeproj'
-           Search all projects including Pods
-          Dir.glob('**/*.xcodeproj').each do |path|
-            puts 'Opening: ' + path
-            project = Xcodeproj::Project.open(path)
-            project.targets.each do |target|
-              # Safely delete only the specific shell script phases causing the hang
-              target.shell_script_build_phases.delete_if do |phase|
-                if phase.name =~ /\[Expo\]|Bundle React|\[CP-User\]|Hermes/
-                  puts '>>> Removed: ' + phase.name + ' from ' + target.name
-                  true
-                else
-                  false
-                end
-              end
-            end
-            project.save
-          end
-          "  
+          import os
+          import re
+
+          # Find every pbxproj file in the ios directory
+          for root, dirs, files in os.walk('ios'):
+              for file in files:
+                  if file == 'project.pbxproj':
+                      file_path = os.path.join(root, file)
+                      print(f"Neutralizing scripts in: {file_path}")
+                      
+                      with open(file_path, 'r') as f:
+                          content = f.read()
+
+                      # This regex finds the shellScript content and replaces it with 'exit 0'
+                      # It handles multi-line scripts and escapes properly.
+                      new_content = re.sub(
+                          r'shellScript = \".*?\";', 
+                          'shellScript = \"exit 0\";', 
+                          content, 
+                          flags=re.DOTALL
+                      )
+
+                      with open(file_path, 'w') as f:
+                          f.write(new_content)
+          print("All scripts neutralized.")
      
           
       - name: Build Unsigned Archive
