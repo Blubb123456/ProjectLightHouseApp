@@ -72,24 +72,42 @@ jobs:
           cd ios
           pod install
 
-      - name: Ultimate Project Sanitization
+      - name: Surgical Phase Removal (Python)
         shell: python3 {0}
         run: |
           import os, re
 
-          def deep_clean(file_path):
+          def sanitize_pbxproj(file_path):
               with open(file_path, 'r') as f:
                   content = f.read()
 
-              # Pattern 1: Remove the content of all shell scripts
-              content = re.sub(r'shellScript = \".*?\";', 'shellScript = \"exit 0\";', content, flags=re.DOTALL)
+              # 1. Identify the GUIDs of the problematic scripts
+              # We look for the lines that define these phases
+              kill_list = [
+                  "FBReactNativeSpec", 
+                  "Constants.manifest", 
+                  "Replace Hermes", 
+                  "[Expo] Configure project", 
+                  "Bundle React Native code and images"
+              ]
               
-              # Pattern 2: Remove the specific named phases that keep reappearing
-              # This removes the reference from the target's buildPhases list
-              kill_list = ["FBReactNativeSpec", "Constants.manifest", "Replace Hermes", "[Expo] Configure", "Bundle React Native"]
-              for target in kill_list:
-                  # This looks for the GUID reference of the script phase and deletes it
-                  content = re.sub(r'.*?/\* ' + re.escape(target) + r' \*/,', '', content)
+              guids = []
+              for item in kill_list:
+                  # Matches: GUID /* Item Name */
+                  found = re.findall(r'([A-F0-9]{24}) /\* ' + re.escape(item), content)
+                  guids.extend(found)
+
+              if not guids:
+                  print(f"No target phases found in {file_path}")
+                  return
+
+              # 2. Remove those GUID references from the buildPhases lists
+              for guid in guids:
+                  print(f"Removing GUID {guid} from build graph...")
+                  content = content.replace(f"\t\t\t\t{guid} /* */,\n", "")
+                  content = content.replace(f"\t\t\t\t{guid},\n", "")
+                  # Also nuke the actual definition block
+                  content = re.sub(r'' + guid + r' /\* .*? \*/ = \{.*? \};', '', content, flags=re.DOTALL)
 
               with open(file_path, 'w') as f:
                   f.write(content)
@@ -97,8 +115,7 @@ jobs:
           for root, dirs, files in os.walk('ios'):
               for file in files:
                   if file == 'project.pbxproj':
-                      print(f"Deep cleaning: {os.path.join(root, file)}")
-                      deep_clean(os.path.join(root, file))
+                      sanitize_pbxproj(os.path.join(root, file))
      
       - name: Manual Module Map Emplacement
         run: |
@@ -133,6 +150,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
+            GENERATE_INFOPLIST_FILE=YES \
             CLANG_ENABLE_MODULE_DEBUGGING=NO \
             VALIDATE_WORKSPACE=NO \
             INFOPLIST_ENABLE_EX_AUTO_LINK=NO \
