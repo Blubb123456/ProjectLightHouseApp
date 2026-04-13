@@ -72,32 +72,33 @@ jobs:
           cd ios
           pod install
 
-      - name: Global Script Wipeout (Python)
+      - name: Ultimate Project Sanitization
         shell: python3 {0}
         run: |
           import os, re
 
-          def total_wipeout(file_path):
+          def deep_clean(file_path):
               with open(file_path, 'r') as f:
                   content = f.read()
 
-              # This regex identifies the entire ShellScript section and empties it
-              # while keeping the file structure valid for Xcode.
-              # It finds everything between the Start and End comments for ShellScripts.
-              pattern = r'/\* Begin PBXShellScriptBuildPhase section \*/.*?/\* End PBXShellScriptBuildPhase section \*/'
-              replacement = '/* Begin PBXShellScriptBuildPhase section */\n/* End PBXShellScriptBuildPhase section */'
+              # Pattern 1: Remove the content of all shell scripts
+              content = re.sub(r'shellScript = \".*?\";', 'shellScript = \"exit 0\";', content, flags=re.DOTALL)
               
-              new_content = re.sub(pattern, replacement, content, flags=re.DOTALL)
+              # Pattern 2: Remove the specific named phases that keep reappearing
+              # This removes the reference from the target's buildPhases list
+              kill_list = ["FBReactNativeSpec", "Constants.manifest", "Replace Hermes", "[Expo] Configure", "Bundle React Native"]
+              for target in kill_list:
+                  # This looks for the GUID reference of the script phase and deletes it
+                  content = re.sub(r'.*?/\* ' + re.escape(target) + r' \*/,', '', content)
 
               with open(file_path, 'w') as f:
-                  f.write(new_content)
+                  f.write(content)
 
-          # Apply to every single pbxproj in the ios folder (Main and Pods)
           for root, dirs, files in os.walk('ios'):
               for file in files:
                   if file == 'project.pbxproj':
-                      print(f"Purging all scripts from: {os.path.join(root, file)}")
-                      total_wipeout(os.path.join(root, file))
+                      print(f"Deep cleaning: {os.path.join(root, file)}")
+                      deep_clean(os.path.join(root, file))
      
       - name: Manual Module Map Emplacement
         run: |
@@ -132,6 +133,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
+            CLANG_ENABLE_MODULE_DEBUGGING=NO \
             VALIDATE_WORKSPACE=NO \
             INFOPLIST_ENABLE_EX_AUTO_LINK=NO \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
