@@ -72,28 +72,27 @@ jobs:
           cd ios
           pod install
 
-      - name: Deep Clean Build Graph (Python)
+      - name: Global Build Phase Purge (Python)
         shell: python3 {0}
         run: |
           import os, re
 
-          def sanitize_pbxproj(file_path):
+          def purge_all_scripts(file_path):
               with open(file_path, 'r') as f:
                   content = f.read()
 
-              # 1. Identify all ShellScript GUIDs
-              # This regex finds the unique 24-character hex ID for every ShellScript phase
-              script_guids = re.findall(r'([A-F0-9]{24}) /\* (?:\[CP-User\]|\[Expo\]|Bundle React|Hermes|Check FBReactNativeSpec)', content)
+              # 1. Find the GUIDs of every PBXShellScriptBuildPhase
+              # Xcode GUIDs are 24-character hex strings
+              script_guids = re.findall(r'([A-F0-9]{24}) /\* .*? \*/ = \{[^}]*?isa = PBXShellScriptBuildPhase;', content, re.DOTALL)
               
               if not script_guids:
-                  print(f"No problematic scripts found in {file_path}")
+                  print(f"No shell scripts found in {file_path}")
                   return
 
-              print(f"Found {len(script_guids)} scripts to remove from {file_path}")
+              print(f"Purging {len(script_guids)} scripts from {file_path}...")
 
-              # 2. Remove the GUIDs from the buildPhases list of every target
               for guid in script_guids:
-                  # Remove the reference in the target buildPhases
+                  # Remove the GUID from target buildPhases lists
                   content = re.sub(r'^\s+' + guid + r' /\* .*? \*/,\n', '', content, flags=re.MULTILINE)
                   # Remove the actual script definition block
                   content = re.sub(r'^\s+' + guid + r' /\* .*? \*/ = \{.*? \};\n', '', content, flags=re.DOTALL | re.MULTILINE)
@@ -101,11 +100,11 @@ jobs:
               with open(file_path, 'w') as f:
                   f.write(content)
 
-          # Apply this to the main app AND the Pods project
+          # Apply recursively to every project file in the ios directory
           for root, dirs, files in os.walk('ios'):
               for file in files:
                   if file == 'project.pbxproj':
-                      sanitize_pbxproj(os.path.join(root, file))
+                      purge_all_scripts(os.path.join(root, file))
      
       - name: Manual Module Map Emplacement
         run: |
