@@ -81,27 +81,39 @@ jobs:
               with open(file_path, 'r') as f:
                   content = f.read()
 
-              # 1. Find all ShellScript GUIDs
-              # These are 24-character hex strings associated with the crashing phases
-              script_guids = re.findall(r'([A-F0-9]{24}) /\* (?:\[CP-User\]|\[Expo\]|Bundle React|Hermes|Check FBReactNativeSpec)', content)
+              # 1. Identify GUIDs for the specific phases causing the hang
+              # This matches the ID and the comment name (e.g., [Hermes], [Expo], etc.)
+              kill_list = [
+                  "FBReactNativeSpec", 
+                  "Constants.manifest", 
+                  "Replace Hermes", 
+                  "[Expo] Configure", 
+                  "Bundle React Native"
+              ]
               
-              if not script_guids:
+              guids = []
+              for item in kill_list:
+                  # Finds the 24-char hex GUID before the script name
+                  found = re.findall(r'([A-F0-9]{24}) /\* ' + re.escape(item), content)
+                  guids.extend(found)
+
+              if not guids:
                   print(f"No target phases found in {file_path}")
                   return
 
-              print(f"Purging {len(script_guids)} script references from {file_path}")
+              print(f"Found {len(guids)} scripts to purge from {file_path}...")
 
-              # 2. Remove the GUID references from the target buildPhases lists
-              for guid in script_guids:
-                  # This removes the GUID from the target's 'buildPhases' array
+              # 2. Delete the GUIDs from the buildPhases list and the definition blocks
+              for guid in guids:
+                  # Remove from the target's 'buildPhases' array
                   content = re.sub(r'^\s+' + guid + r' /\* .*? \*/,\n', '', content, flags=re.MULTILINE)
-                  # This removes the actual definition of the script phase
+                  # Remove the actual definition block of the script
                   content = re.sub(r'^\s+' + guid + r' /\* .*? \*/ = \{.*? \};\n', '', content, flags=re.DOTALL | re.MULTILINE)
 
               with open(file_path, 'w') as f:
                   f.write(content)
 
-          # Apply this to EVERY project file in the ios folder (Main project and Pods)
+          # Apply this to the main app AND the Pods project files
           for root, dirs, files in os.walk('ios'):
               for file in files:
                   if file == 'project.pbxproj':
