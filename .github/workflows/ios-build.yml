@@ -79,7 +79,7 @@ jobs:
 
           def sanitize_pbxproj(file_path):
               with open(file_path, 'r') as f:
-                  content = f.read()
+                  lines = f.readlines()
 
               # 1. Identify GUIDs for the specific phases causing the hang
               # This matches the ID and the comment name (e.g., [Hermes], [Expo], etc.)
@@ -91,33 +91,35 @@ jobs:
                   "Bundle React Native"
               ]
               
-              guids = []
-              for item in kill_list:
-                  # Finds the 24-char hex GUID before the script name
-                  found = re.findall(r'([A-F0-9]{24}) /\* ' + re.escape(item), content)
-                  guids.extend(found)
+              target_guids = set()
+              # First pass: find the GUIDs
+              for line in lines:
+                  if any(k in line for k in kill_list) and "isa = PBXShellScriptBuildPhase" not in line:
+                      # Extract the 24-char hex GUID
+                      match = re.search(r'([A-F0-9]{24})', line)
+                      if match:
+                          target_guids.add(match.group(1))
 
-              if not guids:
-                  print(f"No target phases found in {file_path}")
+              if not target_guids:
+                  print(f"No target GUIDs found in {file_path}")
                   return
 
-              print(f"Found {len(guids)} scripts to purge from {file_path}...")
+              print(f"Purging GUIDs: {target_guids} from {file_path}")
 
-              # 2. Delete the GUIDs from the buildPhases list and the definition blocks
-              for guid in guids:
-                  # Remove from the target's 'buildPhases' array
-                  content = re.sub(r'^\s+' + guid + r' /\* .*? \*/,\n', '', content, flags=re.MULTILINE)
-                  # Remove the actual definition block of the script
-                  content = re.sub(r'^\s+' + guid + r' /\* .*? \*/ = \{.*? \};\n', '', content, flags=re.DOTALL | re.MULTILINE)
+              # Second pass: remove every line containing these GUIDs
+              new_lines = [
+                  line for line in lines 
+                  if not any(guid in line for guid in target_guids)
+              ]
 
               with open(file_path, 'w') as f:
-                  f.write(content)
+                  f.writelines(new_lines)
 
-          # Apply this to the main app AND the Pods project files
+          # Recursively apply to all pbxproj files in the ios directory
           for root, dirs, files in os.walk('ios'):
               for file in files:
                   if file == 'project.pbxproj':
-                      sanitize_pbxproj(os.path.join(root, file))
+                      hard_purge(os.path.join(root, file))
      
       - name: Manual Module Map Emplacement
         run: |
@@ -152,6 +154,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
+            BUILD_LIBRARIES_FOR_DISTRIBUTION=YES \
             ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS=NO \
             GENERATE_INFOPLIST_FILE=YES \
             CLANG_ENABLE_MODULE_DEBUGGING=NO \
