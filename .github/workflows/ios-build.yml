@@ -77,26 +77,33 @@ jobs:
           gem install xcodeproj --no-document
           ruby -e "
             require 'xcodeproj'
-            # Scripts that must run but cause dependency loops in Xcode 16.4
-            target_phases = ['FBReactNativeSpec', 'Hermes', '[Expo] Configure', 'Bundle React Native']
+            project_path = 'ios/Pods/Pods.xcodeproj'
+            project = Xcodeproj::Project.open(project_path)
             
-            Dir.glob('ios/**/*.xcodeproj').each do |path|
-              project = Xcodeproj::Project.open(path)
-              modified = false
-              project.targets.each do |target|
+            # 1. Fix the Hermes path resolution
+            project.targets.each do |target|
+              if target.name.include?('hermes-engine')
                 target.build_phases.each do |phase|
-                  if phase.isa == 'PBXShellScriptBuildPhase' && target_phases.any? { |k| (phase.name || '').include?(k) }
-                    # Strip the lists that trigger the 'Dependency Analysis' hang
-                    phase.input_paths = []
-                    phase.output_paths = []
-                    phase.input_file_list_paths = []
-                    phase.output_file_list_paths = []
-                    modified = true
+                  if phase.isa == 'PBXShellScriptBuildPhase' && phase.shell_script.include?('with-environment.sh')
+                    # Replace the broken relative path with an explicit node_modules path
+                    phase.shell_script = phase.shell_script.gsub(
+                      /\".*\/scripts\/xcode\/with-environment.sh\"/, 
+                      '\"$SRCROOT/../../node_modules/react-native/scripts/xcode/with-environment.sh\"'
+                    )
                   end
                 end
               end
-              project.save if modified
             end
+            
+            # 2. Re-apply the script dependency strip (from previous steps)
+            kill_list = ['FBReactNativeSpec', 'Constants.manifest', '[Expo] Configure', 'Bundle React Native']
+            project.targets.each do |target|
+              target.build_phases.delete_if do |phase|
+                phase.isa == 'PBXShellScriptBuildPhase' && kill_list.any? { |k| (phase.name || '').include?(k) }
+              end
+            end
+            
+            project.save
           "
      
       - name: Manual Module Map Emplacement
@@ -140,6 +147,7 @@ jobs:
             CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES=YES \
             VALIDATE_WORKSPACE=NO \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
+            OTHER_CFLAGS="-Wno-ambiguous-column-numbers" \
             GCC_PRECOMPILE_PREFIX_HEADER=NO \
             SWIFT_COMPILATION_MODE=wholemodule \
             SWIFT_OPTIMIZATION_LEVEL="-Onone" \
