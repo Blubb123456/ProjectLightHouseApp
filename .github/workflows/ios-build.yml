@@ -145,7 +145,7 @@ jobs:
             fi
           done
       
-      - name: Force Fix Hermes Headers
+      - name: Force Fix Hermes Headers (Ruby)
         run: |
           gem install xcodeproj --no-document
           ruby -e '
@@ -153,27 +153,30 @@ jobs:
             project_path = "ios/Pods/Pods.xcodeproj"
             project = Xcodeproj::Project.open(project_path)
             
-            # The culprit is usually the React-hermes target picking up headers from hermes-engine pod
+            # Find the specific target that is failing
             target = project.targets.find { |t| t.name == "React-hermes" }
+            
             if target
               target.build_configurations.each do |config|
-                # 1. Kill Header Maps (the cause of the "stale" file lookup)
+                # 1. Kill Header Maps - this prevents Xcode from using stale indexes
                 config.build_settings["USE_HEADERMAP"] = "NO"
                 
-                # 2. Force the Search Path to look at ReactCommon SOURCE first, not Pods Public headers
-                # We use absolute paths based on the runner environment
-                root = Dir.pwd
+                # 2. Force C++20 for Xcode 16.4 / iOS 18.5
+                config.build_settings["CLANG_CXX_LANGUAGE_STANDARD"] = "c++20"
+                
+                # 3. Prioritize raw source paths from node_modules over Pods public headers
+                # Using $(SRCROOT)/.. to jump from ios/Pods to the project root
                 paths = [
                   "$(inherited)",
-                  "\"#{root}/node_modules/react-native/ReactCommon/hermes/executor\"",
-                  "\"#{root}/node_modules/react-native/ReactCommon\"",
-                  "\"#{root}/node_modules/react-native/ReactCommon/jsi\""
+                  "$(SRCROOT)/../node_modules/react-native/ReactCommon/hermes/executor",
+                  "$(SRCROOT)/../node_modules/react-native/ReactCommon",
+                  "$(SRCROOT)/../node_modules/react-native/ReactCommon/jsi"
                 ]
                 config.build_settings["HEADER_SEARCH_PATHS"] = paths.join(" ")
-                
-                # 3. Force C++ standard
-                config.build_settings["CLANG_CXX_LANGUAGE_STANDARD"] = "c++20"
               end
+              puts "Successfully patched React-hermes headers."
+            else
+              puts "Warning: React-hermes target not found in Pods project."
             end
             project.save
           '
@@ -196,13 +199,9 @@ jobs:
             CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES=YES \
             VALIDATE_WORKSPACE=NO \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
-            GCC_PRECOMPILE_PREFIX_HEADER=NO \
-            SWIFT_COMPILATION_MODE=wholemodule \
-            SWIFT_OPTIMIZATION_LEVEL="-Onone" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            AD_HOC_CODE_SIGNING_ALLOWED=YES \
-            SKIP_BUNDLING=YES
+            AD_HOC_CODE_SIGNING_ALLOWED=YES 
             
 
       - name: Package into IPA
