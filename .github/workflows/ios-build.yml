@@ -77,69 +77,46 @@ jobs:
         run: |
           import os, re
 
-          def hard_purge(file_path):
-              with open(file_path, 'r') as f:
-                  lines = f.readlines()
+          # Keywords for phases causing Exit Code 65
+          kill_list = [
+              "FBReactNativeSpec", 
+              "Constants.manifest", 
+              "Replace Hermes", 
+              "[Expo] Configure", 
+              "Bundle React Native"
+          ]
 
-              # Identify GUIDs associated with problematic phases
-              kill_list = [
-                  "FBReactNativeSpec", 
-                  "Constants.manifest", 
-                  "Replace Hermes", 
-                  "[Expo] Configure", 
-                  "Bundle React Native"
-              ]
-              
-              target_guids = set()
-              # First pass: find the GUIDs
-              for line in lines:
-                  if any(k in line for k in kill_list) and "isa = PBXShellScriptBuildPhase" not in line:
-                      # Extract the 24-char hex GUID
-                      match = re.search(r'([A-F0-9]{24})', line)
-                      if match:
-                          target_guids.add(match.group(1))
-
-              if not target_guids:
-                  print(f"No target GUIDs found in {file_path}")
-                  return
-
-              print(f"Purging GUIDs: {target_guids} from {file_path}")
-
-              # Second pass: remove every line containing these GUIDs
-              new_lines = [
-                  line for line in lines 
-                  if not any(guid in line for guid in target_guids)
-              ]
-
-              with open(file_path, 'w') as f:
-                  f.writelines(new_lines)
-
-          # Recursively apply to all pbxproj files in the ios directory
+          # Recursively find all project files
           for root, dirs, files in os.walk('ios'):
               for file in files:
                   if file == 'project.pbxproj':
-                      hard_purge(os.path.join(root, file))
+                      file_path = os.path.join(root, file)
+                      
+                      with open(file_path, 'r') as f:
+                          lines = f.readlines()
 
-              if not target_guids:
-                  print(f"No target GUIDs found in {file_path}")
-                  return
+                      target_guids = set()
+                      # Pass 1: Collect GUIDs for the phases in the kill_list
+                      for line in lines:
+                          if any(k in line for k in kill_list) and "isa = PBXShellScriptBuildPhase" not in line:
+                              match = re.search(r'([A-F0-9]{24})', line)
+                              if match:
+                                  target_guids.add(match.group(1))
 
-              print(f"Purging GUIDs: {target_guids} from {file_path}")
+                      if not target_guids:
+                          print(f"No target GUIDs found in {file_path}")
+                          continue
 
-              # Second pass: remove every line containing these GUIDs
-              new_lines = [
-                  line for line in lines 
-                  if not any(guid in line for guid in target_guids)
-              ]
+                      print(f"Purging GUIDs: {target_guids} from {file_path}")
 
-              with open(file_path, 'w') as f:
-                  f.writelines(new_lines)
+                      # Pass 2: Reconstruct file without any lines containing those GUIDs
+                      new_lines = [
+                          line for line in lines 
+                          if not any(guid in line for guid in target_guids)
+                      ]
 
-          # Recursively apply to all pbxproj files in the ios directory
-          for root, dirs, files in os.walk('ios'):
-              for file in files:
-                  if file == 'project.pbxproj':
-                      hard_purge(os.path.join(root, file))
+                      with open(file_path, 'w') as f:
+                          f.writelines(new_lines)
      
       - name: Manual Module Map Emplacement
         run: |
