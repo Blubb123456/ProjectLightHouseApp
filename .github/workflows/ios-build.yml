@@ -20,7 +20,6 @@ jobs:
         run: npm install
 
       - name: Generate iOS Folder
-        # Removed --template blank. Using --clean to ensure a fresh start.
         run: npx expo prebuild --platform ios --clean --no-install
 
       - name: Write Optimized Podfile
@@ -51,6 +50,22 @@ jobs:
                   config.build_settings['GCC_PRECOMPILE_PREFIX_HEADER'] = 'NO'
                   config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++20'
                   config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+                  
+                  # Disable Hermes build script to avoid path issues
+                  if target.name == 'hermes-engine'
+                    config.build_settings['HERMES_ENGINE_INSTALLED'] = 'NO'
+                  end
+                end
+              end
+              
+              # Disable hermes-engine build phase
+              installer.pods_project.targets.each do |target|
+                if target.name == 'hermes-engine'
+                  target.build_phases.each do |phase|
+                    if phase.respond_to?(:name) && phase.name.include?('Hermes')
+                      target.build_phases.delete(phase)
+                    end
+                  end
                 end
               end
             end
@@ -62,26 +77,9 @@ jobs:
           cd ios
           pod install
 
-      - name: Deep Patch Hermes Source
-        run: |
-          # Kill the conflicting public headers immediately
-          rm -rf ios/Pods/Headers/Public/React-hermes
-          rm -rf ios/Pods/Headers/Public/hermes-engine
-          
-          # Patch the call site to force the correct type
-          FILE="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
-          if [ -f "$FILE" ]; then
-            sed -i '' 's/return std::make_unique<HermesExecutor>(/return std::make_unique<HermesExecutor>(static_cast<std::shared_ptr<facebook::jsi::Runtime>>(runtime),/g' "$FILE"
-          fi
-
-          # Fix the header visibility
-          HEADER="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.h"
-          if [ -f "$HEADER" ]; then
-            sed -i '' 's/class HermesExecutor : public JSIExecutor {/class HermesExecutor : public JSIExecutor { public:/g' "$HEADER"
-          fi
       - name: Clear Derived Data
         run: rm -rf build/DerivedData
-        
+
       - name: Build Unsigned Archive
         run: |
           xcodebuild archive \
@@ -97,8 +95,8 @@ jobs:
             USE_HEADERMAP=NO \
             VALIDATE_WORKSPACE=NO \
             CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO
-            
+            CODE_SIGNING_REQUIRED=NO \
+            HERMES_ENGINE_INSTALLED=NO
 
       - name: Package into IPA
         run: |
