@@ -84,9 +84,9 @@ jobs:
               project.targets.each do |target|
                 target.build_phases.delete_if do |phase|
                   if phase.isa == 'PBXShellScriptBuildPhase' && kill_list.any? { |k| (phase.name || '').include?(k) }
-                    # Clean up associated file list paths before deleting
-                    phase.input_file_list_paths&.clear
-                    phase.output_file_list_paths&.clear
+                    # Strip dependency paths to prevent the compiler from waiting for missing assets
+                    phase.input_paths&.clear
+                    phase.output_paths&.clear
                     modified = true
                     true
                   end
