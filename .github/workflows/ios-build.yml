@@ -123,6 +123,7 @@ jobs:
       - name: Build Unsigned Archive
         run: |
           xcodebuild archive \
+          HEADER_SEARCH_PATHS='$(inherited) "${PODS_ROOT}/Headers/Public/React-graphics" "${PODS_ROOT}/Headers/Public/React-renderer-graphics"' \
             -workspace ios/ProjectLightHouseReactApp.xcworkspace \
             -scheme ProjectLightHouseReactApp \
             -configuration Release \
