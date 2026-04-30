@@ -62,18 +62,25 @@ jobs:
           cd ios
           pod install
 
-      - name: Fix Hermes Path and C++ Types
+      - name: Surgical Source Patch
         run: |
-          # 1. Physical Cleanup
-          find ios/Pods/Headers -name "HermesExecutorFactory.h" -delete
-          
-          # 2. C++ Pointer Cast Patch
           FILE="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
+          
           if [ -f "$FILE" ]; then
+            echo "Applying deep patches to $FILE..."
+            
+            # 1. Fix the shared_ptr instantiation (Line 207 area)
+            # We bypass make_shared and use a direct constructor to avoid the template instantiation error
+            sed -i '' 's/auto decoratedRuntime = std::make_shared<DecoratedRuntime>(/auto decoratedRuntime = std::shared_ptr<DecoratedRuntime>(new DecoratedRuntime(/g' "$FILE"
+            
+            # 2. Fix the HermesExecutor constructor call (Line 247 area)
+            # We force the compiler to see it as the base jsi::Runtime pointer
             sed -i '' 's/return std::make_unique<HermesExecutor>(/return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(runtime),/g' "$FILE"
+            
+            echo "✅ Source patched."
           fi
 
-          # 3. RUBY SURGERY: Fix the missing script path for hermes-engine
+          # 3. RUBY SURGERY: Fix paths and force C++ standards
           gem install xcodeproj --no-document
           ruby -e '
             require "xcodeproj"
@@ -81,20 +88,21 @@ jobs:
             abs_root = Dir.pwd
             
             project.targets.each do |target|
-              # Fix the "with-environment.sh" path error
+              # Fix the hermes script path error
               if target.name.include?("hermes-engine")
                 target.build_phases.each do |phase|
                   if phase.isa == "PBXShellScriptBuildPhase"
-                    # Force the shell script to find the React Native scripts folder
                     phase.shell_script = "export REACT_NATIVE_PATH=\"#{abs_root}/node_modules/react-native\"\n" + phase.shell_script
                   end
                 end
               end
               
-              # Force C++ standard on all targets to prevent mismatches
               target.build_configurations.each do |config|
                 config.build_settings["CLANG_CXX_LANGUAGE_STANDARD"] = "c++20"
                 config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "15.1"
+                config.build_settings["USE_HEADERMAP"] = "NO"
+                # This flag allows the compiler to be less pedantic about header locations
+                config.build_settings["OTHER_CPLUSPLUSFLAGS"] = "-Wno-error=non-modular-include-in-framework-module"
               end
             end
             project.save
