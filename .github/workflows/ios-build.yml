@@ -83,29 +83,45 @@ jobs:
               project = Xcodeproj::Project.open(project_path)
               abs_root = Dir.pwd
               
-              # ONLY clear paths for scripts that cause dependency cycles
-              # DO NOT clear FBReactNativeSpec, as it breaks the C++ compiler
+              # 1. Clear the cycle-causing scripts (Same as before)
               cycle_scripts = ["Constants.manifest", "[Expo] Configure", "Bundle React Native"]
               
               project.targets.each do |target|
-                target.build_phases.each do |phase|
-                  if phase.isa == "PBXShellScriptBuildPhase"
-                    
-                    # 1. Keep the Hermes Fix (Working)
-                    if target.name.include?("hermes-engine")
+                # 2. Inject Hermes environment (Same as before)
+                if target.name.include?("hermes-engine")
+                  target.build_phases.each do |phase|
+                    if phase.isa == "PBXShellScriptBuildPhase"
                       env_vars = "export PODS_ROOT=\"#{abs_root}/ios/Pods\"\n"
                       env_vars += "export REACT_NATIVE_PATH=\"#{abs_root}/node_modules/react-native\"\n"
-                      if !phase.shell_script.include?("export PODS_ROOT")
-                        phase.shell_script = env_vars + phase.shell_script
-                      end
+                      phase.shell_script = env_vars + phase.shell_script unless phase.shell_script.include?("export PODS_ROOT")
                     end
-                    
-                    # 2. Fix Xcode 16 Cycles for non-codegen scripts
-                    if cycle_scripts.any? { |k| (phase.name || "").include?(k) }
-                      phase.input_paths = []
-                      phase.output_paths = []
+                  end
+                end
+
+                # 3. FIX: Global Header Cleanup and C++ Alignment
+                target.build_configurations.each do |config|
+                  # Force C++20 for Xcode 16 / iOS 18 compatibility
+                  config.build_settings["CLANG_CXX_LANGUAGE_STANDARD"] = "c++20"
+                  # Disable Header Maps to prevent the "1 vs 6 args" header conflict
+                  config.build_settings["USE_HEADERMAP"] = "NO"
+                  
+                  # Strip any manual HEADER_SEARCH_PATHS that might have been saved in the proj
+                  if config.build_settings["HEADER_SEARCH_PATHS"]
+                    paths = config.build_settings["HEADER_SEARCH_PATHS"]
+                    if paths.is_a?(String)
+                      paths = paths.split
                     end
-                    
+                    # Remove the manual ReactCommon injection we tried earlier
+                    paths.delete_if { |path| path.include?("ReactCommon") || path.include?("node_modules/react-native") }
+                    config.build_settings["HEADER_SEARCH_PATHS"] = paths.join(" ")
+                  end
+                end
+
+                # 4. Clear dependency cycles (Same as before)
+                target.build_phases.each do |phase|
+                  if phase.isa == "PBXShellScriptBuildPhase" && cycle_scripts.any? { |k| (phase.name || "").include?(k) }
+                    phase.input_paths = []
+                    phase.output_paths = []
                   end
                 end
               end
@@ -147,6 +163,7 @@ jobs:
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
             -jobs 1 \
+            USE_HEADERMAP=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
             CLANG_ENABLE_MODULE_DEBUGGING=NO \
             CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES=YES \
@@ -159,8 +176,8 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
-            SKIP_BUNDLING=YES \
-            OTHER_CPLUSPLUSFLAGS="-fno-aligned-allocation"
+            SKIP_BUNDLING=YES
+            
 
       - name: Package into IPA
         run: |
