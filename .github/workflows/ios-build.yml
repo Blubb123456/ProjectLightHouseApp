@@ -19,7 +19,7 @@ jobs:
         run: npm install
 
       - name: Generate iOS Folder (Prebuild)
-        run: npx expo prebuild --platform ios --clean --no-install
+        run: npx expo prebuild --platform ios --template blank --no-install
 
       - name: Write Optimized Podfile
         run: |
@@ -123,68 +123,34 @@ jobs:
             end
           '
      
-      - name: Manual Module Map Emplacement
+      - name: Deep Patch Hermes Source
         run: |
-          # The directory where Xcode 16.4 is looking for modules
-          DEST="build/DerivedData/Build/Intermediates.noindex/ArchiveIntermediates/ProjectLightHouseReactApp/BuildProductsPath/Release-iphoneos"
+          # 1. Physically delete the public headers that cause the conflict
+          # This forces Xcode to use the source-of-truth in node_modules
+          rm -rf ios/Pods/Headers/Public/React-hermes
+          rm -rf ios/Pods/Headers/Public/hermes-engine
           
-          # Modules listed in your error log
-          MODULES=("EXConstants" "Expo" "ExpoAsset" "ExpoFileSystem" "ExpoFont" "ExpoImagePicker" "ExpoKeepAwake" "ExpoModulesCore")
+          # 2. Patch the .cpp file to use an explicit cast. 
+          # The error "no known conversion" usually stems from a DecoratedRuntime mismatch.
+          # This sed command fixes the constructor call site in the Factory.cpp
+          FILE="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
+          if [ -f "$FILE" ]; then
+            sed -i '' 's/return std::make_unique<HermesExecutor>(/return std::make_unique<HermesExecutor>(static_cast<std::shared_ptr<jsi::Runtime>>(runtime),/g' "$FILE"
+            echo "✅ Patched HermesExecutorFactory.cpp site"
+          fi
 
-          for MOD in "${MODULES[@]}"; do
-            echo "Searching for $MOD.modulemap..."
-            # Find the actual modulemap file in the Pods directory
-            MAP_PATH=$(find ios/Pods -name "$MOD.modulemap" | head -n 1)
-            
-            if [ -n "$MAP_PATH" ]; then
-              mkdir -p "$DEST/$MOD"
-              cp "$MAP_PATH" "$DEST/$MOD/"
-              echo "✅ Placed $MOD.modulemap in $DEST/$MOD/"
-            else
-              echo "⚠️ Warning: $MOD.modulemap not found in ios/Pods"
-            fi
-          done
-      
-      - name: Brute Force Hermes Header Sync
-        run: |
-          gem install xcodeproj --no-document
-          ruby -e '
-            require "fileutils"
-            abs_root = Dir.pwd
-            
-            # 1. Physical Overwrite: Force the correct header into the Pods Public folder
-            source_header = "#{abs_root}/node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.h"
-            target_dir = "#{abs_root}/ios/Pods/Headers/Public/React-hermes"
-            
-            if File.exist?(source_header)
-              FileUtils.mkdir_p(target_dir)
-              FileUtils.cp(source_header, "#{target_dir}/HermesExecutorFactory.h")
-              puts "✅ Physically forced HermesExecutorFactory.h into Pods headers."
-            end
+          # 3. Force the header to define the 6-arg constructor 
+          # regardless of what the compiler thinks it sees.
+          HEADER="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.h"
+          if [ -f "$HEADER" ]; then
+            # Ensure the class definition is visible and clean
+            sed -i '' 's/class HermesExecutor : public JSIExecutor {/class HermesExecutor : public JSIExecutor { public:/g' "$HEADER"
+            echo "✅ Patched HermesExecutorFactory.h visibility"
+          fi
 
-            # 2. Project Target Surgery
-            require "xcodeproj"
-            project_path = "ios/Pods/Pods.xcodeproj"
-            project = Xcodeproj::Project.open(project_path)
-            
-            target = project.targets.find { |t| t.name == "React-hermes" }
-            if target
-              target.build_configurations.each do |config|
-                # Nuke Header Maps - they are the reason Xcode finds the "wrong" file
-                config.build_settings["USE_HEADERMAP"] = "NO"
-                config.build_settings["HEADER_SEARCH_PATHS"] = [
-                  "$(inherited)",
-                  "\"#{abs_root}/node_modules/react-native/ReactCommon/hermes/executor\"",
-                  "\"#{abs_root}/node_modules/react-native/ReactCommon\"",
-                  "\"#{abs_root}/ios/Pods/Headers/Public/React-hermes\""
-                ].join(" ")
-                config.build_settings["CLANG_CXX_LANGUAGE_STANDARD"] = "c++20"
-              end
-              project.save
-              puts "✅ Patched React-hermes build settings."
-            end
-          '
-          
+      - name: Clear Derived Data
+        run: rm -rf build/DerivedData
+        
       - name: Build Unsigned Archive
         run: |
           xcodebuild archive \
