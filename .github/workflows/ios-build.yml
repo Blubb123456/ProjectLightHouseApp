@@ -83,10 +83,8 @@ jobs:
               project = Xcodeproj::Project.open(project_path)
               abs_root = Dir.pwd
               
-              cycle_scripts = ["Constants.manifest", "[Expo] Configure", "Bundle React Native"]
-              
               project.targets.each do |target|
-                # 1. Hermes Environment Injection (Keep this!)
+                # 1. Hermes Environment Fix (Keep this)
                 if target.name.include?("hermes-engine")
                   target.build_phases.each do |phase|
                     if phase.isa == "PBXShellScriptBuildPhase"
@@ -97,28 +95,25 @@ jobs:
                   end
                 end
 
-                # 2. THE C++ FIX: Kill Header Maps & Align Paths
+                # 2. THE NUCLEAR C++ FIX: Header Search Path Cleanup
                 target.build_configurations.each do |config|
-                  # Disable Header Maps to fix the 1-vs-6 argument conflict
                   config.build_settings["USE_HEADERMAP"] = "NO"
-                  
-                  # Force C++20 for modern React Native compatibility
                   config.build_settings["CLANG_CXX_LANGUAGE_STANDARD"] = "c++20"
                   
-                  # Ensure the Public headers are searched before anything else
-                  hp = config.build_settings["HEADER_SEARCH_PATHS"] || ["$(inherited)"]
-                  hp = [hp] if hp.is_a?(String)
-                  new_paths = [
+                  # Force the compiler to find the headers in node_modules/react-native first
+                  # This bypasses the stale headers in the Pods/Headers/Public folder
+                  custom_paths = [
                     "$(inherited)",
-                    "$(PODS_ROOT)/Headers/Public/React-hermes",
-                    "$(PODS_ROOT)/Headers/Public/hermes-engine"
+                    "\"#{abs_root}/node_modules/react-native/ReactCommon/hermes/executor\"",
+                    "\"#{abs_root}/node_modules/react-native/ReactCommon\"",
+                    "\"$(PODS_ROOT)/Headers/Public/React-hermes\""
                   ]
-                  config.build_settings["HEADER_SEARCH_PATHS"] = (new_paths + hp).uniq.join(" ")
+                  config.build_settings["HEADER_SEARCH_PATHS"] = custom_paths.join(" ")
                 end
 
-                # 3. Xcode 16 Dependency Cycle Fix
+                # 3. Xcode 16 Cycle Fix
                 target.build_phases.each do |phase|
-                  if phase.isa == "PBXShellScriptBuildPhase" && cycle_scripts.any? { |k| (phase.name || "").include?(k) }
+                  if phase.isa == "PBXShellScriptBuildPhase" && ["Constants.manifest", "Bundle React Native"].any? { |k| (phase.name || "").include?(k) }
                     phase.input_paths = []
                     phase.output_paths = []
                   end
@@ -172,7 +167,8 @@ jobs:
             SWIFT_COMPILATION_MODE=wholemodule \
             SWIFT_OPTIMIZATION_LEVEL="-Onone" \
             CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_REQUIRED=NO \ 
+            -v \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
             SKIP_BUNDLING=YES
             
