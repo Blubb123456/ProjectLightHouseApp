@@ -71,30 +71,37 @@ jobs:
           EOF
           pod install
 
-      - name: Overwrite Hermes Source (Standardized)
+      - name: Overwrite Hermes Source (Literal Fix)
         run: |
           FILE="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
           if [ -f "$FILE" ]; then
             python3 -c "
           import os
           path = '$FILE'
-          # We read the original to keep the structure but we will fix the specific reentrancy and constructor blocks
           with open(path, 'r') as f:
               lines = f.readlines()
 
           with open(path, 'w') as f:
-              f.write('#include <thread>\n') # Force include the missing header
+              # Add essential headers at the very top
+              f.write('#include <thread>\n')
+              f.write('#include <atomic>\n')
+              
               for line in lines:
-                  # Fix 1: The thread reentrancy check
-                  line = line.replace('std::thread::id', 'std::this_thread::get_id().constructor_type') # placeholder fix
-                  # Actually, let's just do a direct literal replacement of the broken blocks
+                  # Fix 1: Resolve the 'expected' thread ID ambiguity by using auto
+                  line = line.replace('std::thread::id expected', 'auto expected')
+                  
+                  # Fix 2: Fix the pointer constructor (using the exact local variables from React Native)
                   if 'std::make_shared<DecoratedRuntime>' in line:
                       f.write('  auto decoratedRuntime = std::shared_ptr<DecoratedRuntime>(new DecoratedRuntime(std::move(hermesRuntime), *runtime, messageQueueThread, isDebuggable, debuggerName));\n')
+                  
+                  # Fix 3: Fix the HermesExecutor unique_ptr return
                   elif 'return std::make_unique<HermesExecutor>(runtime,' in line:
                       f.write('  return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(decoratedRuntime), instanceCallback, messageQueueThread, executorToken, installBindings);\n')
+                  
                   else:
                       f.write(line)
           "
+            echo "✅ Source patched with explicit headers and auto types."
           fi
 
       - name: Build Unsigned Archive
