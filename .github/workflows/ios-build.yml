@@ -83,14 +83,15 @@ jobs:
               project = Xcodeproj::Project.open(project_path)
               abs_root = Dir.pwd
               
-              # Scripts we need to run, but whose file-tracking breaks Xcode 16
-              hang_phases = ["FBReactNativeSpec", "Constants.manifest", "[Expo] Configure", "Bundle React Native"]
+              # ONLY clear paths for scripts that cause dependency cycles
+              # DO NOT clear FBReactNativeSpec, as it breaks the C++ compiler
+              cycle_scripts = ["Constants.manifest", "[Expo] Configure", "Bundle React Native"]
               
               project.targets.each do |target|
                 target.build_phases.each do |phase|
                   if phase.isa == "PBXShellScriptBuildPhase"
                     
-                    # 1. The Hermes Silver Bullet (Fixes the Node crash)
+                    # 1. Keep the Hermes Fix (Working)
                     if target.name.include?("hermes-engine")
                       env_vars = "export PODS_ROOT=\"#{abs_root}/ios/Pods\"\n"
                       env_vars += "export REACT_NATIVE_PATH=\"#{abs_root}/node_modules/react-native\"\n"
@@ -99,18 +100,15 @@ jobs:
                       end
                     end
                     
-                    # 2. The Dependency Hang Fix (Fixes Xcode freezing, keeps Codegen alive)
-                    if hang_phases.any? { |k| (phase.name || "").include?(k) }
+                    # 2. Fix Xcode 16 Cycles for non-codegen scripts
+                    if cycle_scripts.any? { |k| (phase.name || "").include?(k) }
                       phase.input_paths = []
                       phase.output_paths = []
-                      phase.input_file_list_paths = []
-                      phase.output_file_list_paths = []
                     end
                     
                   end
                 end
               end
-              
               project.save
             end
           '
@@ -149,7 +147,6 @@ jobs:
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
             -jobs 1 \
-            HEADER_SEARCH_PATHS='$(inherited) "${PODS_ROOT}/Headers/Public/React-graphics" "${PODS_ROOT}/Headers/Public/React-renderer-graphics" "$(SRCROOT)/../node_modules/react-native/ReactCommon"' \
             COMPILER_INDEX_STORE_ENABLE=NO \
             CLANG_ENABLE_MODULE_DEBUGGING=NO \
             CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES=YES \
