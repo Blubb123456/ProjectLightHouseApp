@@ -77,43 +77,22 @@ jobs:
           gem install xcodeproj --no-document
           ruby -e "
             require 'xcodeproj'
-
-            # Substrings of the phases we want to kill
-            kill_list = [
-              'FBReactNativeSpec',
-              'Constants.manifest',
-              'Hermes',
-              '[Expo] Configure',
-              'Bundle React Native'
-            ]
-
-            # Find all Xcode projects, including Pods
+            kill_list = ['FBReactNativeSpec', 'Constants.manifest', 'Hermes', '[Expo] Configure', 'Bundle React Native']
             Dir.glob('ios/**/*.xcodeproj').each do |path|
-              begin
-                project = Xcodeproj::Project.open(path)
-                modified = false
-
-                project.targets.each do |target|
-                  target.build_phases.delete_if do |phase|
-                    if phase.isa == 'PBXShellScriptBuildPhase'
-                      name = phase.name || ''
-                      if kill_list.any? { |k| name.include?(k) }
-                        puts \"Purged '\#{name}' from target '\#{target.name}' in \#{File.basename(path)}\"
-                        modified = true
-                        true # Removes the phase
-                      else
-                        false
-                      end
-                    else
-                      false
-                    end
+              project = Xcodeproj::Project.open(path)
+              modified = false
+              project.targets.each do |target|
+                target.build_phases.delete_if do |phase|
+                  if phase.isa == 'PBXShellScriptBuildPhase' && kill_list.any? { |k| (phase.name || '').include?(k) }
+                    # Clean up associated file list paths before deleting
+                    phase.input_file_list_paths&.clear
+                    phase.output_file_list_paths&.clear
+                    modified = true
+                    true
                   end
                 end
-
-                project.save if modified
-              rescue StandardError => e
-                puts \"Skipped \#{path} (\#{e.message})\"
               end
+              project.save if modified
             end
           "
      
@@ -150,6 +129,9 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            CLANG_ENABLE_MODULE_DEBUGGING=NO \
+            CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES=YES \
             VALIDATE_WORKSPACE=NO \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
             GCC_PRECOMPILE_PREFIX_HEADER=NO \
