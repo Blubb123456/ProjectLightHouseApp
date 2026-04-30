@@ -149,8 +149,6 @@ jobs:
       - name: Build Unsigned Archive
         run: |
           xcodebuild archive \
-          HEADER_SEARCH_PATHS='$(inherited) "${PODS_ROOT}/Headers/Public/React-graphics" "${PODS_ROOT}/Headers/Public/React-renderer-graphics"' \
-          HEADER_SEARCH_PATHS='$(inherited) ${SRCHROOT}/node_modules/react-native/ReactCommon' \
             -workspace ios/ProjectLightHouseReactApp.xcworkspace \
             -scheme ProjectLightHouseReactApp \
             -configuration Release \
@@ -160,6 +158,7 @@ jobs:
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
             -jobs 1 \
+            HEADER_SEARCH_PATHS='$(inherited) "${PODS_ROOT}/Headers/Public/React-graphics" "${PODS_ROOT}/Headers/Public/React-renderer-graphics" "$(SRCROOT)/../node_modules/react-native/ReactCommon"' \
             COMPILER_INDEX_STORE_ENABLE=NO \
             CLANG_ENABLE_MODULE_DEBUGGING=NO \
             CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES=YES \
