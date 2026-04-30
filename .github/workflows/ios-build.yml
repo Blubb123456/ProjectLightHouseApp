@@ -86,7 +86,7 @@ jobs:
               cycle_scripts = ["Constants.manifest", "[Expo] Configure", "Bundle React Native"]
               
               project.targets.each do |target|
-                # 1. Hermes Environment Injection
+                # 1. Hermes Environment Injection (Keep this!)
                 if target.name.include?("hermes-engine")
                   target.build_phases.each do |phase|
                     if phase.isa == "PBXShellScriptBuildPhase"
@@ -97,25 +97,23 @@ jobs:
                   end
                 end
 
-                # 2. THE C++ FIX: Header & Standard Alignment
+                # 2. THE C++ FIX: Kill Header Maps & Align Paths
                 target.build_configurations.each do |config|
-                  # Force C++20 for iOS 18.5/Xcode 16.4 compatibility
-                  config.build_settings["CLANG_CXX_LANGUAGE_STANDARD"] = "c++20"
-                  # DISABLE Header Maps to fix the 1-vs-6 argument conflict
+                  # Disable Header Maps to fix the 1-vs-6 argument conflict
                   config.build_settings["USE_HEADERMAP"] = "NO"
                   
-                  # Force the correct Hermes/React headers to the very top
-                  headers = [
-                    "$(inherited)",
-                    "\"${PODS_ROOT}/Headers/Public/React-hermes\"",
-                    "\"${PODS_ROOT}/Headers/Public/hermes-engine\""
-                  ]
-                  config.build_settings["HEADER_SEARCH_PATHS"] = headers.join(" ")
+                  # Force C++20 for modern React Native compatibility
+                  config.build_settings["CLANG_CXX_LANGUAGE_STANDARD"] = "c++20"
                   
-                  # Scrub the bad Yoga flag if it exists
-                  if config.build_settings["OTHER_CFLAGS"]
-                    config.build_settings["OTHER_CFLAGS"].gsub!("-Wno-ambiguous-column-numbers", "")
-                  end
+                  # Ensure the Public headers are searched before anything else
+                  hp = config.build_settings["HEADER_SEARCH_PATHS"] || ["$(inherited)"]
+                  hp = [hp] if hp.is_a?(String)
+                  new_paths = [
+                    "$(inherited)",
+                    "$(PODS_ROOT)/Headers/Public/React-hermes",
+                    "$(PODS_ROOT)/Headers/Public/hermes-engine"
+                  ]
+                  config.build_settings["HEADER_SEARCH_PATHS"] = (new_paths + hp).uniq.join(" ")
                 end
 
                 # 3. Xcode 16 Dependency Cycle Fix
