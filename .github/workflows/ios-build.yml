@@ -72,12 +72,12 @@ jobs:
           cd ios
           pod install
 
-      - name: Surgical Project Repair (Python)
+      - name: Surgical Script Removal
         shell: python3 {0}
         run: |
           import os, re
 
-          # Keywords for the problematic phases
+          # These are the specific names triggering your Exit Code 65
           kill_list = [
               "FBReactNativeSpec", 
               "Constants.manifest", 
@@ -90,38 +90,33 @@ jobs:
               for file in files:
                   if file == 'project.pbxproj':
                       file_path = os.path.join(root, file)
-                      print(f"Repairing: {file_path}")
+                      print(f"Applying surgery to: {file_path}")
                       
                       with open(file_path, 'r') as f:
                           content = f.read()
 
-                      # 1. Find GUIDs specifically marked as PBXShellScriptBuildPhase
-                      # This ensures we don't kill vital file references or groups
+                      # 1. Identify GUIDs for these scripts
+                      # Matches: GUID /* Script Name */ = { isa = PBXShellScriptBuildPhase; ... };
                       guids = []
                       for name in kill_list:
-                          # Look for: GUID /* Name */ = { isa = PBXShellScriptBuildPhase;
                           pattern = r'([A-F0-9]{24}) /\* ' + re.escape(name) + r'.*?isa = PBXShellScriptBuildPhase'
                           found = re.findall(pattern, content, re.DOTALL)
                           guids.extend(found)
 
                       if not guids:
-                          print(f"No shell script phases found in {file_path}")
                           continue
 
-                      print(f"Surgically removing GUIDs: {guids}")
+                      print(f"Removing GUIDs: {guids}")
 
+                      # 2. Delete the GUIDs from the target buildPhases arrays
                       for guid in guids:
-                          # Pattern A: Remove the line from the buildPhases array 
-                          # Example: GUID /* Name */,
+                          # This removes the reference in the build order
                           content = re.sub(r'^\s+' + guid + r' /\* .*? \*/,\n', '', content, flags=re.MULTILINE)
-                          
-                          # Pattern B: Remove the actual definition block
-                          # Example: GUID /* Name */ = { ... };
+                          # This removes the block definition itself
                           content = re.sub(r'^\s+' + guid + r' /\* .*? \*/ = \{.*?\};\n', '', content, flags=re.DOTALL | re.MULTILINE)
 
                       with open(file_path, 'w') as f:
                           f.write(content)
-          print("Project file integrity maintained.")
      
       - name: Manual Module Map Emplacement
         run: |
@@ -156,20 +151,11 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
-            BUILD_LIBRARIES_FOR_DISTRIBUTION=YES \
-            ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS=NO \
-            GENERATE_INFOPLIST_FILE=YES \
-            CLANG_ENABLE_MODULE_DEBUGGING=NO \
-            VALIDATE_WORKSPACE=NO \
-            INFOPLIST_ENABLE_EX_AUTO_LINK=NO \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
+            INFOPLIST_ENABLE_EX_AUTO_LINK=NO \
             GCC_PRECOMPILE_PREFIX_HEADER=NO \
-            CLANG_ENABLE_MODULES=YES \
-            HEADER_SEARCH_PATHS="$(PWD)/ios/Pods/Headers/Public/**" \
             SWIFT_COMPILATION_MODE=wholemodule \
             SWIFT_OPTIMIZATION_LEVEL="-Onone" \
-            SKIP_INSTALL=NO \
-            COMPILER_INDEX_STORE_ENABLE=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
