@@ -14,12 +14,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
 
       - name: Install Dependencies
         run: npm install
 
       - name: Generate iOS Folder
+        # Standard prebuild, no flags that cause dependency map errors
         run: npx expo prebuild --platform ios --clean --no-install
 
       - name: Write Optimized Podfile
@@ -46,26 +46,13 @@ jobs:
             post_install do |installer|
               installer.pods_project.targets.each do |target|
                 target.build_configurations.each do |config|
+                  # Fix the Swift optimization warning from your logs
+                  config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
                   config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
                   config.build_settings['GCC_PRECOMPILE_PREFIX_HEADER'] = 'NO'
                   config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++20'
-                  config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-                  
-                  # Disable Hermes build script to avoid path issues
-                  if target.name == 'hermes-engine'
-                    config.build_settings['HERMES_ENGINE_INSTALLED'] = 'NO'
-                  end
-                end
-              end
-              
-              # Disable hermes-engine build phase
-              installer.pods_project.targets.each do |target|
-                if target.name == 'hermes-engine'
-                  target.build_phases.each do |phase|
-                    if phase.respond_to?(:name) && phase.name.include?('Hermes')
-                      target.build_phases.delete(phase)
-                    end
-                  end
+                  # Required for Xcode 16.4 C++ stability
+                  config.build_settings['OTHER_CPLUSPLUSFLAGS'] = '-Wno-error=non-modular-include-in-framework-module'
                 end
               end
             end
@@ -77,8 +64,26 @@ jobs:
           cd ios
           pod install
 
-      - name: Clear Derived Data
-        run: rm -rf build/DerivedData
+      - name: Deep Patch Hermes Source
+        run: |
+          # 1. Physically remove the header symlinks that cause the 1-vs-6 arg conflict
+          rm -rf ios/Pods/Headers/Public/React-hermes
+          rm -rf ios/Pods/Headers/Public/hermes-engine
+          
+          # 2. Patch the .cpp file with the EXACT namespace for facebook::jsi
+          FILE="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
+          if [ -f "$FILE" ]; then
+            # This handles the smart pointer conversion error directly
+            sed -i '' 's/return std::make_unique<HermesExecutor>(/return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(runtime),/g' "$FILE"
+            echo "✅ Patched HermesExecutorFactory.cpp"
+          fi
+
+          # 3. Force the header to be public and clean
+          HEADER="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.h"
+          if [ -f "$HEADER" ]; then
+            sed -i '' 's/class HermesExecutor : public JSIExecutor {/class HermesExecutor : public JSIExecutor { public:/g' "$HEADER"
+            echo "✅ Patched HermesExecutorFactory.h"
+          fi
 
       - name: Build Unsigned Archive
         run: |
@@ -93,10 +98,10 @@ jobs:
             -parallelizeTargets=NO \
             -jobs 1 \
             USE_HEADERMAP=NO \
-            VALIDATE_WORKSPACE=NO \
+            SWIFT_OPTIMIZATION_LEVEL="-Onone" \
+            COMPILER_INDEX_STORE_ENABLE=NO \
             CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            HERMES_ENGINE_INSTALLED=NO
+            CODE_SIGNING_REQUIRED=NO
 
       - name: Package into IPA
         run: |
