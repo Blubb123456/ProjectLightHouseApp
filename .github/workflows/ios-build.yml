@@ -71,39 +71,39 @@ jobs:
           EOF
           pod install
 
-      - name: Overwrite Hermes Source (Literal Fix)
+      - name: Overwrite Hermes Source (Regex Preservation)
         run: |
           FILE="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
           if [ -f "$FILE" ]; then
             python3 -c "
-          import os
+          import re, os
           path = '$FILE'
           with open(path, 'r') as f:
-              lines = f.readlines()
+              content = f.read()
+
+          # 1. Add missing headers if not present
+          if '#include <thread>' not in content:
+              content = '#include <thread>\n#include <atomic>\n' + content
+
+          # 2. Fix the thread ID ambiguity by using auto
+          content = content.replace('std::thread::id expected', 'auto expected')
+
+          # 3. Fix the shared_ptr constructor (Replace std::make_shared with std::shared_ptr<DecoratedRuntime>(new DecoratedRuntime)
+          # This regex finds 'std::make_shared<DecoratedRuntime>(' and replaces it while keeping everything inside the parens
+          content = re.sub(r'std::make_shared<DecoratedRuntime>\(', 
+                           r'std::shared_ptr<DecoratedRuntime>(new DecoratedRuntime(', content)
+
+          # 4. Fix the HermesExecutor constructor cast
+          # We look for the start of the make_unique call and inject the static_pointer_cast for the first argument
+          content = re.sub(r'return std::make_unique<HermesExecutor>\(\s*runtime,', 
+                           r'return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(runtime),', content)
 
           with open(path, 'w') as f:
-              # Add essential headers at the very top
-              f.write('#include <thread>\n')
-              f.write('#include <atomic>\n')
-              
-              for line in lines:
-                  # Fix 1: Resolve the 'expected' thread ID ambiguity by using auto
-                  line = line.replace('std::thread::id expected', 'auto expected')
-                  
-                  # Fix 2: Fix the pointer constructor (using the exact local variables from React Native)
-                  if 'std::make_shared<DecoratedRuntime>' in line:
-                      f.write('  auto decoratedRuntime = std::shared_ptr<DecoratedRuntime>(new DecoratedRuntime(std::move(hermesRuntime), *runtime, messageQueueThread, isDebuggable, debuggerName));\n')
-                  
-                  # Fix 3: Fix the HermesExecutor unique_ptr return
-                  elif 'return std::make_unique<HermesExecutor>(runtime,' in line:
-                      f.write('  return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(decoratedRuntime), instanceCallback, messageQueueThread, executorToken, installBindings);\n')
-                  
-                  else:
-                      f.write(line)
+              f.write(content)
           "
-            echo "✅ Source patched with explicit headers and auto types."
+            echo "✅ Source patched using Regex preservation."
           fi
-
+          
       - name: Build Unsigned Archive
         run: |
           rm -rf build/DerivedData
