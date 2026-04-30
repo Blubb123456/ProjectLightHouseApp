@@ -81,38 +81,27 @@ jobs:
             
             if File.exist?(project_path)
               project = Xcodeproj::Project.open(project_path)
-              
-              # 1. Guaranteed absolute paths for CI
               abs_root = Dir.pwd
-              abs_env_script = "#{abs_root}/node_modules/react-native/scripts/xcode/with-environment.sh"
-              abs_hermes_sdks = "#{abs_root}/node_modules/react-native/sdks/hermes-engine"
               
               project.targets.each do |target|
+                # Target the hermes engine scripts
                 if target.name.include?("hermes-engine")
                   target.build_phases.each do |phase|
                     if phase.isa == "PBXShellScriptBuildPhase"
-                      # Fix the environment wrapper path
-                      phase.shell_script = phase.shell_script.gsub(
-                        /"[^"]*with-environment\.sh"/, "\"#{abs_env_script}\""
-                      ).gsub(
-                        /(?<!")\S+with-environment\.sh(?!")/, "\"#{abs_env_script}\""
-                      )
+                      # The Silver Bullet: Hardcode the dropped variables at the top of the script
+                      env_vars = "export PODS_ROOT=\"#{abs_root}/ios/Pods\"\n"
+                      env_vars += "export REACT_NATIVE_PATH=\"#{abs_root}/node_modules/react-native\"\n"
                       
-                      # Fix internal Hermes SDK paths (the current error)
-                      # This catches $PODS_ROOT/hermes-engine or relative /sdks/hermes-engine
-                      phase.shell_script = phase.shell_script.gsub(
-                        /\$PODS_ROOT\/hermes-engine/, abs_hermes_sdks
-                      ).gsub(
-                        /\$HERMES_ENGINE_PATH/, abs_hermes_sdks
-                      ).gsub(
-                        /"\/sdks\/hermes-engine/, "\"#{abs_hermes_sdks}"
-                      )
+                      # Prepend them safely
+                      if !phase.shell_script.include?("export PODS_ROOT")
+                        phase.shell_script = env_vars + phase.shell_script
+                      end
                     end
                   end
                 end
               end
               
-              # 2. Strip the dependency loops that hang Xcode 16.4
+              # Clear dependency loops causing Xcode 16.4 hanging
               kill_list = ["FBReactNativeSpec", "Constants.manifest", "[Expo] Configure", "Bundle React Native"]
               project.targets.each do |target|
                 target.build_phases.delete_if do |phase|
