@@ -72,33 +72,39 @@ jobs:
           cd ios
           pod install
 
-      - name: Surgical Script Neutralization (Python)
+      - name: Unique Script Neutralization (Python)
         shell: python3 {0}
         run: |
           import os, re
 
-          def satisfy_xcode(file_path):
+          def fix_pbxproj(file_path):
               with open(file_path, 'r') as f:
                   content = f.read()
 
-              # 1. Force all shell scripts to exit 0 immediately
-              content = re.sub(r'shellScript = ".*?";', 'shellScript = "exit 0;";', content, flags=re.DOTALL)
+              # Find every ShellScript block GUID
+              # GUIDs are 24-character hex strings
+              guids = re.findall(r'([A-F0-9]{24}) /\* .*? \*/ = \{[^}]*?isa = PBXShellScriptBuildPhase;', content, re.DOTALL)
               
-              # 2. Inject a dummy output file to satisfy "Dependency Analysis"
-              # This fixes the "does not specify any outputs" warning
-              content = content.replace('outputPaths = (\n', 'outputPaths = (\n\t\t\t\t"/tmp/dummy_output",\n')
-              
-              # 3. For phases missing outputPaths entirely, we inject the key
-              # We target the specific phases mentioned in your logs
-              kill_list = ["FBReactNativeSpec", "Constants.manifest", "Replace Hermes", "[Expo] Configure", "Bundle React Native"]
-              for target in kill_list:
-                  pattern = r'(/\* ' + re.escape(target) + r' \*/ = \{[^{]*?isa = PBXShellScriptBuildPhase;.*?)(inputPaths = \(.*?\);|)(.*?)(outputPaths = \(.*?\);|)(.*?\};)'
-                  replacement = r'\1\2\n\t\t\toutputPaths = (" /tmp/dummy_output");\3\5'
-                  # This is complex, so let's use a simpler string replacement for CI stability
-                  if target in content:
-                      print(f"Neutralizing {target} in {file_path}")
+              for guid in guids:
+                  # 1. Force the script to do nothing
+                  # We use a non-destructive regex to swap the script content
+                  content = re.sub(r'(' + guid + r' /\* .*? \*/ = \{.*?shellScript = ).*?;', r'\1"exit 0;";', content, flags=re.DOTALL)
+                  
+                  # 2. Inject a UNIQUE output path using the GUID
+                  # $(DERIVED_FILE_DIR) is a safe, per-target Xcode variable
+                  unique_output = f'outputPaths = ("$(DERIVED_FILE_DIR)/dummy_{guid}");'
+                  
+                  # If outputPaths already exists in this block, replace it; otherwise, insert it.
+                  block_pattern = r'(' + guid + r' /\* .*? \*/ = \{[^}]*?)(outputPaths = \(.*?\);|)(\s*\};)'
+                  
+                  def inject_unique(match):
+                      base = match.group(1)
+                      suffix = match.group(3)
+                      return f"{base}\n\t\t\t{unique_output}{suffix}"
+                  
+                  content = re.sub(block_pattern, inject_unique, content, flags=re.DOTALL)
 
-              # 4. Disable 'Always Out of Date' (Dependency Analysis)
+              # 3. Disable 'Always Out of Date' to prevent unnecessary execution
               content = content.replace('alwaysOutOfDate = 1;', 'alwaysOutOfDate = 0;')
 
               with open(file_path, 'w') as f:
@@ -107,7 +113,8 @@ jobs:
           for root, dirs, files in os.walk('ios'):
               for file in files:
                   if file == 'project.pbxproj':
-                      satisfy_xcode(os.path.join(root, file))
+                      print(f"Assigning unique identities in: {os.path.join(root, file)}")
+                      fix_pbxproj(os.path.join(root, file))
      
       - name: Manual Module Map Emplacement
         run: |
@@ -142,7 +149,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
-            FUSE_BUILD_SCRIPT_PHASES=YES \
+            USE_RECURSIVE_SCRIPT_INPUTS_IN_SCRIPT_PHASES=YES \
             VALIDATE_WORKSPACE=NO \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
             GCC_PRECOMPILE_PREFIX_HEADER=NO \
