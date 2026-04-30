@@ -83,11 +83,10 @@ jobs:
               project = Xcodeproj::Project.open(project_path)
               abs_root = Dir.pwd
               
-              # 1. Clear the cycle-causing scripts (Same as before)
               cycle_scripts = ["Constants.manifest", "[Expo] Configure", "Bundle React Native"]
               
               project.targets.each do |target|
-                # 2. Inject Hermes environment (Same as before)
+                # 1. Hermes Environment Injection
                 if target.name.include?("hermes-engine")
                   target.build_phases.each do |phase|
                     if phase.isa == "PBXShellScriptBuildPhase"
@@ -98,26 +97,28 @@ jobs:
                   end
                 end
 
-                # 3. FIX: Global Header Cleanup and C++ Alignment
+                # 2. THE C++ FIX: Header & Standard Alignment
                 target.build_configurations.each do |config|
-                  # Force C++20 for Xcode 16 / iOS 18 compatibility
+                  # Force C++20 for iOS 18.5/Xcode 16.4 compatibility
                   config.build_settings["CLANG_CXX_LANGUAGE_STANDARD"] = "c++20"
-                  # Disable Header Maps to prevent the "1 vs 6 args" header conflict
+                  # DISABLE Header Maps to fix the 1-vs-6 argument conflict
                   config.build_settings["USE_HEADERMAP"] = "NO"
                   
-                  # Strip any manual HEADER_SEARCH_PATHS that might have been saved in the proj
-                  if config.build_settings["HEADER_SEARCH_PATHS"]
-                    paths = config.build_settings["HEADER_SEARCH_PATHS"]
-                    if paths.is_a?(String)
-                      paths = paths.split
-                    end
-                    # Remove the manual ReactCommon injection we tried earlier
-                    paths.delete_if { |path| path.include?("ReactCommon") || path.include?("node_modules/react-native") }
-                    config.build_settings["HEADER_SEARCH_PATHS"] = paths.join(" ")
+                  # Force the correct Hermes/React headers to the very top
+                  headers = [
+                    "$(inherited)",
+                    "\"${PODS_ROOT}/Headers/Public/React-hermes\"",
+                    "\"${PODS_ROOT}/Headers/Public/hermes-engine\""
+                  ]
+                  config.build_settings["HEADER_SEARCH_PATHS"] = headers.join(" ")
+                  
+                  # Scrub the bad Yoga flag if it exists
+                  if config.build_settings["OTHER_CFLAGS"]
+                    config.build_settings["OTHER_CFLAGS"].gsub!("-Wno-ambiguous-column-numbers", "")
                   end
                 end
 
-                # 4. Clear dependency cycles (Same as before)
+                # 3. Xcode 16 Dependency Cycle Fix
                 target.build_phases.each do |phase|
                   if phase.isa == "PBXShellScriptBuildPhase" && cycle_scripts.any? { |k| (phase.name || "").include?(k) }
                     phase.input_paths = []
