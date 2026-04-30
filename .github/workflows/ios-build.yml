@@ -47,12 +47,17 @@ jobs:
                   config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
                   config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
                 end
+                # This fixes the "with-environment.sh" missing error
+                target.build_phases.each do |phase|
+                  if phase.respond_to?(:shell_script)
+                    phase.shell_script = "export REACT_NATIVE_PATH=\"$(pwd)/../node_modules/react-native\"\n" + phase.shell_script
+                  end
+                end
               end
             end
           end
           EOF
           pod install
-
       - name: Surgical Source Overwrite
         run: |
           FILE="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
@@ -78,6 +83,7 @@ jobs:
             -parallelizeTargets=NO \
             -jobs 1 \
             USE_HEADERMAP=NO \
+            REACT_NATIVE_PATH="$REACT_NATIVE_PATH" \
             COMPILER_INDEX_STORE_ENABLE=NO \
             CLANG_ENABLE_MODULES=NO \
             SWIFT_OPTIMIZATION_LEVEL="-Onone" \
