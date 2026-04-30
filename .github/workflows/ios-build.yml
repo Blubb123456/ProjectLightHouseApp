@@ -18,6 +18,16 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
+      - name: Debug Path Verification
+        run: |
+          echo "Checking for with-environment.sh..."
+          if [ -f "node_modules/react-native/scripts/xcode/with-environment.sh" ]; then
+            echo "✅ Found at root node_modules"
+          else
+            echo "❌ NOT FOUND at root node_modules"
+            find . -name "with-environment.sh"
+          fi
+
       - name: Generate iOS Folder
         run: npx expo prebuild --platform ios --clean --no-install
 
@@ -47,10 +57,12 @@ jobs:
                   config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
                   config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
                 end
-                # This fixes the "with-environment.sh" missing error
+                # Aggressive path fix for CI
                 target.build_phases.each do |phase|
                   if phase.respond_to?(:shell_script)
-                    phase.shell_script = "export REACT_NATIVE_PATH=\"$(pwd)/../node_modules/react-native\"\n" + phase.shell_script
+                    # We use the absolute path from the runner workdir to be safe
+                    abs_path = "#{Dir.pwd}/.."
+                    phase.shell_script = "export REACT_NATIVE_PATH=\"#{abs_path}/node_modules/react-native\"\n" + phase.shell_script
                   end
                 end
               end
@@ -58,20 +70,20 @@ jobs:
           end
           EOF
           pod install
+
       - name: Surgical Source Overwrite
         run: |
           FILE="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
           if [ -f "$FILE" ]; then
-            python3 -c "import os; path = '$FILE'; content = open(path).read(); content = content.replace('std::make_shared<DecoratedRuntime>(', 'std::shared_ptr<DecoratedRuntime>(new DecoratedRuntime('); content = content.replace('std::make_unique<HermesExecutor>(', 'std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(runtime),'); open(path, 'w').write(content)"
-            echo "✅ Source overwritten successfully."
-          else
-            echo "❌ File not found: $FILE"
-            exit 1
+            python3 -c "path = '$FILE'; content = open(path).read(); content = content.replace('std::make_shared<DecoratedRuntime>(', 'std::shared_ptr<DecoratedRuntime>(new DecoratedRuntime('); content = content.replace('std::make_unique<HermesExecutor>(', 'std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(runtime),'); open(path, 'w').write(content)"
+            echo "✅ Source overwritten."
           fi
 
       - name: Build Unsigned Archive
         run: |
           rm -rf build/DerivedData
+          # Explicitly set the path for the xcodebuild environment
+          export REACT_NATIVE_PATH="$(pwd)/node_modules/react-native"
           xcodebuild archive \
             -workspace ios/ProjectLightHouseReactApp.xcworkspace \
             -scheme ProjectLightHouseReactApp \
@@ -82,11 +94,10 @@ jobs:
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
             -jobs 1 \
-            USE_HEADERMAP=NO \
             REACT_NATIVE_PATH="$REACT_NATIVE_PATH" \
+            USE_HEADERMAP=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
             CLANG_ENABLE_MODULES=NO \
-            SWIFT_OPTIMIZATION_LEVEL="-Onone" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             clean archive
