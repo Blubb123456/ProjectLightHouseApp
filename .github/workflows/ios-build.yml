@@ -72,49 +72,57 @@ jobs:
           cd ios
           pod install
 
-      - name: Unique Script Neutralization (Python)
+      - name: Safe Orphan Script Phases (Python)
         shell: python3 {0}
         run: |
           import os, re
 
-          def fix_pbxproj(file_path):
-              with open(file_path, 'r') as f:
-                  content = f.read()
-
-              # Find every ShellScript block GUID
-              # GUIDs are 24-character hex strings
-              guids = re.findall(r'([A-F0-9]{24}) /\* .*? \*/ = \{[^}]*?isa = PBXShellScriptBuildPhase;', content, re.DOTALL)
-              
-              for guid in guids:
-                  # 1. Force the script to do nothing
-                  # We use a non-destructive regex to swap the script content
-                  content = re.sub(r'(' + guid + r' /\* .*? \*/ = \{.*?shellScript = ).*?;', r'\1"exit 0;";', content, flags=re.DOTALL)
-                  
-                  # 2. Inject a UNIQUE output path using the GUID
-                  # $(DERIVED_FILE_DIR) is a safe, per-target Xcode variable
-                  unique_output = f'outputPaths = ("$(DERIVED_FILE_DIR)/dummy_{guid}");'
-                  
-                  # If outputPaths already exists in this block, replace it; otherwise, insert it.
-                  block_pattern = r'(' + guid + r' /\* .*? \*/ = \{[^}]*?)(outputPaths = \(.*?\);|)(\s*\};)'
-                  
-                  def inject_unique(match):
-                      base = match.group(1)
-                      suffix = match.group(3)
-                      return f"{base}\n\t\t\t{unique_output}{suffix}"
-                  
-                  content = re.sub(block_pattern, inject_unique, content, flags=re.DOTALL)
-
-              # 3. Disable 'Always Out of Date' to prevent unnecessary execution
-              content = content.replace('alwaysOutOfDate = 1;', 'alwaysOutOfDate = 0;')
-
-              with open(file_path, 'w') as f:
-                  f.write(content)
+          # Keywords for the problematic phases
+          kill_list = [
+              "FBReactNativeSpec", 
+              "Constants.manifest", 
+              "Replace Hermes", 
+              "[Expo] Configure", 
+              "Bundle React Native"
+          ]
 
           for root, dirs, files in os.walk('ios'):
               for file in files:
                   if file == 'project.pbxproj':
-                      print(f"Assigning unique identities in: {os.path.join(root, file)}")
-                      fix_pbxproj(os.path.join(root, file))
+                      file_path = os.path.join(root, file)
+                      
+                      with open(file_path, 'r') as f:
+                          lines = f.readlines()
+
+                      # 1. Identify the GUIDs of the target scripts
+                      bad_guids = set()
+                      for line in lines:
+                          # Look for the start of the definition block
+                          if "= {" in line and any(k in line for k in kill_list):
+                              match = re.search(r'([A-F0-9]{24})', line)
+                              if match:
+                                  bad_guids.add(match.group(1))
+
+                      if not bad_guids:
+                          continue
+                      
+                      print(f"Orphaning GUIDs in {file_path}: {bad_guids}")
+
+                      # 2. Rebuild the file, dropping ONLY the array references
+                      new_lines = []
+                      for line in lines:
+                          # Xcode array references look like: <tabs>GUID /* Name */,
+                          match = re.search(r'^\s*([A-F0-9]{24}) /\*.*?\*/,$', line)
+                          
+                          # If this line is a reference to a bad GUID, skip it
+                          if match and match.group(1) in bad_guids:
+                              print(f"Removed reference: {line.strip()}")
+                              continue
+                          
+                          new_lines.append(line)
+
+                      with open(file_path, 'w') as f:
+                          f.writelines(new_lines)
      
       - name: Manual Module Map Emplacement
         run: |
