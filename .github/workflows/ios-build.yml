@@ -132,6 +132,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
+            -jobs 1 \
             COMPILER_INDEX_STORE_ENABLE=NO \
             CLANG_ENABLE_MODULE_DEBUGGING=NO \
             CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES=YES \
@@ -143,7 +144,8 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
-            SKIP_BUNDLING=YES
+            SKIP_BUNDLING=YES \
+            OTHER_CPLUSPLUSFLAGS="-fno-aligned-allocation"
 
       - name: Package into IPA
         run: |
