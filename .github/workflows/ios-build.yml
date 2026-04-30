@@ -9,17 +9,19 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
 
       - name: Install Dependencies
         run: npm install
 
-      - name: Generate iOS Folder (Prebuild)
-        run: npx expo prebuild --platform ios --template blank --no-install
+      - name: Generate iOS Folder
+        # Removed --template blank. Using --clean to ensure a fresh start.
+        run: npx expo prebuild --platform ios --clean --no-install
 
       - name: Write Optimized Podfile
         run: |
@@ -47,126 +49,55 @@ jobs:
                 target.build_configurations.each do |config|
                   config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
                   config.build_settings['GCC_PRECOMPILE_PREFIX_HEADER'] = 'NO'
-                  config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
+                  config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++20'
                   config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-                  config.build_settings['DEFINES_MODULE'] = 'YES'
                 end
-              end
-              
-              installer.aggregate_targets.each do |target|
-                target.user_project.build_configurations.each do |config|
-                  config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-                  config.build_settings['GCC_PRECOMPILE_PREFIX_HEADER'] = 'NO'
-                  config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
-                end
-                target.user_project.save
               end
             end
           end
           EOF
-      
-      
-      
+
       - name: Install Pods
         run: |
           cd ios
           pod install
 
-      - name: Native Project Sanitization (Ruby)
-        run: |
-          gem install xcodeproj --no-document
-          ruby -e '
-            require "xcodeproj"
-            project_path = "ios/Pods/Pods.xcodeproj"
-            
-            if File.exist?(project_path)
-              project = Xcodeproj::Project.open(project_path)
-              abs_root = Dir.pwd
-              
-              project.targets.each do |target|
-                # 1. Hermes Environment Fix (Keep this)
-                if target.name.include?("hermes-engine")
-                  target.build_phases.each do |phase|
-                    if phase.isa == "PBXShellScriptBuildPhase"
-                      env_vars = "export PODS_ROOT=\"#{abs_root}/ios/Pods\"\n"
-                      env_vars += "export REACT_NATIVE_PATH=\"#{abs_root}/node_modules/react-native\"\n"
-                      phase.shell_script = env_vars + phase.shell_script unless phase.shell_script.include?("export PODS_ROOT")
-                    end
-                  end
-                end
-
-                # 2. THE NUCLEAR C++ FIX: Header Search Path Cleanup
-                target.build_configurations.each do |config|
-                  config.build_settings["USE_HEADERMAP"] = "NO"
-                  config.build_settings["CLANG_CXX_LANGUAGE_STANDARD"] = "c++20"
-                  
-                  # Force the compiler to find the headers in node_modules/react-native first
-                  # This bypasses the stale headers in the Pods/Headers/Public folder
-                  custom_paths = [
-                    "$(inherited)",
-                    "\"#{abs_root}/node_modules/react-native/ReactCommon/hermes/executor\"",
-                    "\"#{abs_root}/node_modules/react-native/ReactCommon\"",
-                    "\"$(PODS_ROOT)/Headers/Public/React-hermes\""
-                  ]
-                  config.build_settings["HEADER_SEARCH_PATHS"] = custom_paths.join(" ")
-                end
-
-                # 3. Xcode 16 Cycle Fix
-                target.build_phases.each do |phase|
-                  if phase.isa == "PBXShellScriptBuildPhase" && ["Constants.manifest", "Bundle React Native"].any? { |k| (phase.name || "").include?(k) }
-                    phase.input_paths = []
-                    phase.output_paths = []
-                  end
-                end
-              end
-              project.save
-            end
-          '
-     
       - name: Deep Patch Hermes Source
         run: |
-          # 1. Physically delete the public headers that cause the conflict
-          # This forces Xcode to use the source-of-truth in node_modules
+          # Kill the conflicting public headers immediately
           rm -rf ios/Pods/Headers/Public/React-hermes
           rm -rf ios/Pods/Headers/Public/hermes-engine
           
-          # 2. Patch the .cpp file to use an explicit cast. 
-          # The error "no known conversion" usually stems from a DecoratedRuntime mismatch.
-          # This sed command fixes the constructor call site in the Factory.cpp
+          # Patch the call site to force the correct type
           FILE="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
           if [ -f "$FILE" ]; then
-            sed -i '' 's/return std::make_unique<HermesExecutor>(/return std::make_unique<HermesExecutor>(static_cast<std::shared_ptr<jsi::Runtime>>(runtime),/g' "$FILE"
-            echo "✅ Patched HermesExecutorFactory.cpp site"
+            sed -i '' 's/return std::make_unique<HermesExecutor>(/return std::make_unique<HermesExecutor>(static_cast<std::shared_ptr<facebook::jsi::Runtime>>(runtime),/g' "$FILE"
           fi
 
-          # 3. Force the header to define the 6-arg constructor 
-          # regardless of what the compiler thinks it sees.
+          # Fix the header visibility
           HEADER="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.h"
           if [ -f "$HEADER" ]; then
-            # Ensure the class definition is visible and clean
             sed -i '' 's/class HermesExecutor : public JSIExecutor {/class HermesExecutor : public JSIExecutor { public:/g' "$HEADER"
-            echo "✅ Patched HermesExecutorFactory.h visibility"
           fi
-
       - name: Clear Derived Data
         run: rm -rf build/DerivedData
         
       - name: Build Unsigned Archive
         run: |
           xcodebuild archive \
-          -workspace ios/ProjectLightHouseReactApp.xcworkspace \
-          -scheme ProjectLightHouseReactApp \
-          -configuration Release \
-          -archivePath build/ProjectLighthouse.xcarchive \
-          -sdk iphoneos \
-          -destination 'generic/platform=iOS' \
-          -derivedDataPath build/DerivedData \
-          -parallelizeTargets=NO \
-          -jobs 1 \
-          USE_HEADERMAP=NO \
-          VALIDATE_WORKSPACE=NO \
-          CODE_SIGNING_ALLOWED=NO \
-          CODE_SIGNING_REQUIRED=NO
+            -workspace ios/ProjectLightHouseReactApp.xcworkspace \
+            -scheme ProjectLightHouseReactApp \
+            -configuration Release \
+            -archivePath build/ProjectLighthouse.xcarchive \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            -parallelizeTargets=NO \
+            -jobs 1 \
+            USE_HEADERMAP=NO \
+            VALIDATE_WORKSPACE=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
             
 
       - name: Package into IPA
