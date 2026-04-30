@@ -21,7 +21,7 @@ jobs:
       - name: Generate iOS Folder
         run: npx expo prebuild --platform ios --clean --no-install
 
-      - name: Write Optimized Podfile
+      - name: Write Final Podfile
         run: |
           cd ios
           cat <<'EOF' > Podfile
@@ -45,11 +45,12 @@ jobs:
             post_install do |installer|
               installer.pods_project.targets.each do |target|
                 target.build_configurations.each do |config|
-                  config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
                   config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
                   config.build_settings['GCC_PRECOMPILE_PREFIX_HEADER'] = 'NO'
                   config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++20'
-                  config.build_settings['OTHER_CPLUSPLUSFLAGS'] = '-Wno-error=non-modular-include-in-framework-module'
+                  config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
+                  # This prevents the specific "1 argument vs 6" header confusion
+                  config.build_settings['USE_HEADERMAP'] = 'NO'
                 end
               end
             end
@@ -61,20 +62,18 @@ jobs:
           cd ios
           pod install
 
-      - name: Deep Patch Hermes Source
+      - name: High-Intensity Patching
         run: |
-          # Physically remove conflicting header symlinks
-          rm -rf ios/Pods/Headers/Public/React-hermes
-          rm -rf ios/Pods/Headers/Public/hermes-engine
+          # 1. Physically delete the public headers that are masking the real code
+          find ios/Pods/Headers -name "HermesExecutorFactory.h" -delete
           
-          # TARGETED C++ FIX:
-          # We must use std::static_pointer_cast to convert DecoratedRuntime to jsi::Runtime
+          # 2. Patch the .cpp file with the exact static pointer cast
           FILE="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
           if [ -f "$FILE" ]; then
             sed -i '' 's/return std::make_unique<HermesExecutor>(/return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(runtime),/g' "$FILE"
           fi
 
-          # Ensure the HermesExecutor class is properly exported in the header
+          # 3. Force the header to expose the 6-arg constructor publicly
           HEADER="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.h"
           if [ -f "$HEADER" ]; then
             sed -i '' 's/class HermesExecutor : public JSIExecutor {/class HermesExecutor : public JSIExecutor { public:/g' "$HEADER"
@@ -93,21 +92,21 @@ jobs:
             -parallelizeTargets=NO \
             -jobs 1 \
             USE_HEADERMAP=NO \
-            COMPILER_INDEX_STORE_ENABLE=NO \
             SWIFT_OPTIMIZATION_LEVEL="-Onone" \
+            CLANG_CXX_LANGUAGE_STANDARD="c++20" \
+            COMPILER_INDEX_STORE_ENABLE=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             AD_HOC_CODE_SIGNING_ALLOWED=YES
 
-      - name: Package into IPA
+      - name: Package IPA
         run: |
           mkdir -p build/Payload
           APP_PATH=$(find build/ProjectLighthouse.xcarchive -name "*.app" | head -1)
           cp -r "$APP_PATH" build/Payload/
-          cd build
-          zip -r ProjectLighthouse.ipa Payload
+          cd build && zip -r ProjectLighthouse.ipa Payload
 
-      - name: Upload Artifact
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: ProjectLighthouse-IPA
