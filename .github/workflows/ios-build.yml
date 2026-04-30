@@ -72,57 +72,50 @@ jobs:
           cd ios
           pod install
 
-      - name: Safe Orphan Script Phases (Python)
-        shell: python3 {0}
+      - name: Native Project Sanitization (Ruby)
         run: |
-          import os, re
+          gem install xcodeproj --no-document
+          ruby -e "
+            require 'xcodeproj'
 
-          # Keywords for the problematic phases
-          kill_list = [
-              "FBReactNativeSpec", 
-              "Constants.manifest", 
-              "Replace Hermes", 
-              "[Expo] Configure", 
-              "Bundle React Native"
-          ]
+            # Substrings of the phases we want to kill
+            kill_list = [
+              'FBReactNativeSpec',
+              'Constants.manifest',
+              'Hermes',
+              '[Expo] Configure',
+              'Bundle React Native'
+            ]
 
-          for root, dirs, files in os.walk('ios'):
-              for file in files:
-                  if file == 'project.pbxproj':
-                      file_path = os.path.join(root, file)
-                      
-                      with open(file_path, 'r') as f:
-                          lines = f.readlines()
+            # Find all Xcode projects, including Pods
+            Dir.glob('ios/**/*.xcodeproj').each do |path|
+              begin
+                project = Xcodeproj::Project.open(path)
+                modified = false
 
-                      # 1. Identify the GUIDs of the target scripts
-                      bad_guids = set()
-                      for line in lines:
-                          # Look for the start of the definition block
-                          if "= {" in line and any(k in line for k in kill_list):
-                              match = re.search(r'([A-F0-9]{24})', line)
-                              if match:
-                                  bad_guids.add(match.group(1))
+                project.targets.each do |target|
+                  target.build_phases.delete_if do |phase|
+                    if phase.isa == 'PBXShellScriptBuildPhase'
+                      name = phase.name || ''
+                      if kill_list.any? { |k| name.include?(k) }
+                        puts \"Purged '\#{name}' from target '\#{target.name}' in \#{File.basename(path)}\"
+                        modified = true
+                        true # Removes the phase
+                      else
+                        false
+                      end
+                    else
+                      false
+                    end
+                  end
+                end
 
-                      if not bad_guids:
-                          continue
-                      
-                      print(f"Orphaning GUIDs in {file_path}: {bad_guids}")
-
-                      # 2. Rebuild the file, dropping ONLY the array references
-                      new_lines = []
-                      for line in lines:
-                          # Xcode array references look like: <tabs>GUID /* Name */,
-                          match = re.search(r'^\s*([A-F0-9]{24}) /\*.*?\*/,$', line)
-                          
-                          # If this line is a reference to a bad GUID, skip it
-                          if match and match.group(1) in bad_guids:
-                              print(f"Removed reference: {line.strip()}")
-                              continue
-                          
-                          new_lines.append(line)
-
-                      with open(file_path, 'w') as f:
-                          f.writelines(new_lines)
+                project.save if modified
+              rescue StandardError => e
+                puts \"Skipped \#{path} (\#{e.message})\"
+              end
+            end
+          "
      
       - name: Manual Module Map Emplacement
         run: |
@@ -157,7 +150,6 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
-            USE_RECURSIVE_SCRIPT_INPUTS_IN_SCRIPT_PHASES=YES \
             VALIDATE_WORKSPACE=NO \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
             GCC_PRECOMPILE_PREFIX_HEADER=NO \
