@@ -144,6 +144,39 @@ jobs:
               echo "⚠️ Warning: $MOD.modulemap not found in ios/Pods"
             fi
           done
+      
+      - name: Force Fix Hermes Headers
+        run: |
+          gem install xcodeproj --no-document
+          ruby -e '
+            require "xcodeproj"
+            project_path = "ios/Pods/Pods.xcodeproj"
+            project = Xcodeproj::Project.open(project_path)
+            
+            # The culprit is usually the React-hermes target picking up headers from hermes-engine pod
+            target = project.targets.find { |t| t.name == "React-hermes" }
+            if target
+              target.build_configurations.each do |config|
+                # 1. Kill Header Maps (the cause of the "stale" file lookup)
+                config.build_settings["USE_HEADERMAP"] = "NO"
+                
+                # 2. Force the Search Path to look at ReactCommon SOURCE first, not Pods Public headers
+                # We use absolute paths based on the runner environment
+                root = Dir.pwd
+                paths = [
+                  "$(inherited)",
+                  "\"#{root}/node_modules/react-native/ReactCommon/hermes/executor\"",
+                  "\"#{root}/node_modules/react-native/ReactCommon\"",
+                  "\"#{root}/node_modules/react-native/ReactCommon/jsi\""
+                ]
+                config.build_settings["HEADER_SEARCH_PATHS"] = paths.join(" ")
+                
+                # 3. Force C++ standard
+                config.build_settings["CLANG_CXX_LANGUAGE_STANDARD"] = "c++20"
+              end
+            end
+            project.save
+          '
           
       - name: Build Unsigned Archive
         run: |
