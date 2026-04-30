@@ -145,63 +145,62 @@ jobs:
             fi
           done
       
-      - name: Force Fix Hermes Headers (Ruby)
+      - name: Brute Force Hermes Header Sync
         run: |
           gem install xcodeproj --no-document
           ruby -e '
+            require "fileutils"
+            abs_root = Dir.pwd
+            
+            # 1. Physical Overwrite: Force the correct header into the Pods Public folder
+            source_header = "#{abs_root}/node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.h"
+            target_dir = "#{abs_root}/ios/Pods/Headers/Public/React-hermes"
+            
+            if File.exist?(source_header)
+              FileUtils.mkdir_p(target_dir)
+              FileUtils.cp(source_header, "#{target_dir}/HermesExecutorFactory.h")
+              puts "✅ Physically forced HermesExecutorFactory.h into Pods headers."
+            end
+
+            # 2. Project Target Surgery
             require "xcodeproj"
             project_path = "ios/Pods/Pods.xcodeproj"
             project = Xcodeproj::Project.open(project_path)
             
-            # Find the specific target that is failing
             target = project.targets.find { |t| t.name == "React-hermes" }
-            
             if target
               target.build_configurations.each do |config|
-                # 1. Kill Header Maps - this prevents Xcode from using stale indexes
+                # Nuke Header Maps - they are the reason Xcode finds the "wrong" file
                 config.build_settings["USE_HEADERMAP"] = "NO"
-                
-                # 2. Force C++20 for Xcode 16.4 / iOS 18.5
-                config.build_settings["CLANG_CXX_LANGUAGE_STANDARD"] = "c++20"
-                
-                # 3. Prioritize raw source paths from node_modules over Pods public headers
-                # Using $(SRCROOT)/.. to jump from ios/Pods to the project root
-                paths = [
+                config.build_settings["HEADER_SEARCH_PATHS"] = [
                   "$(inherited)",
-                  "$(SRCROOT)/../node_modules/react-native/ReactCommon/hermes/executor",
-                  "$(SRCROOT)/../node_modules/react-native/ReactCommon",
-                  "$(SRCROOT)/../node_modules/react-native/ReactCommon/jsi"
-                ]
-                config.build_settings["HEADER_SEARCH_PATHS"] = paths.join(" ")
+                  "\"#{abs_root}/node_modules/react-native/ReactCommon/hermes/executor\"",
+                  "\"#{abs_root}/node_modules/react-native/ReactCommon\"",
+                  "\"#{abs_root}/ios/Pods/Headers/Public/React-hermes\""
+                ].join(" ")
+                config.build_settings["CLANG_CXX_LANGUAGE_STANDARD"] = "c++20"
               end
-              puts "Successfully patched React-hermes headers."
-            else
-              puts "Warning: React-hermes target not found in Pods project."
+              project.save
+              puts "✅ Patched React-hermes build settings."
             end
-            project.save
           '
           
       - name: Build Unsigned Archive
         run: |
           xcodebuild archive \
-            -workspace ios/ProjectLightHouseReactApp.xcworkspace \
-            -scheme ProjectLightHouseReactApp \
-            -configuration Release \
-            -archivePath build/ProjectLighthouse.xcarchive \
-            -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            -derivedDataPath build/DerivedData \
-            -parallelizeTargets=NO \
-            -jobs 1 \
-            USE_HEADERMAP=NO \
-            COMPILER_INDEX_STORE_ENABLE=NO \
-            CLANG_ENABLE_MODULE_DEBUGGING=NO \
-            CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES=YES \
-            VALIDATE_WORKSPACE=NO \
-            ENABLE_USER_SCRIPT_SANDBOXING=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            AD_HOC_CODE_SIGNING_ALLOWED=YES 
+          -workspace ios/ProjectLightHouseReactApp.xcworkspace \
+          -scheme ProjectLightHouseReactApp \
+          -configuration Release \
+          -archivePath build/ProjectLighthouse.xcarchive \
+          -sdk iphoneos \
+          -destination 'generic/platform=iOS' \
+          -derivedDataPath build/DerivedData \
+          -parallelizeTargets=NO \
+          -jobs 1 \
+          USE_HEADERMAP=NO \
+          VALIDATE_WORKSPACE=NO \
+          CODE_SIGNING_ALLOWED=NO \
+          CODE_SIGNING_REQUIRED=NO
             
 
       - name: Package into IPA
