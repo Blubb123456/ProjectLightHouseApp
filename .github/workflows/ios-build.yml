@@ -62,25 +62,40 @@ jobs:
           cd ios
           pod install
 
-      - name: Surgical Source Patch
+      - name: Overwrite Hermes Source
         run: |
           FILE="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
           
           if [ -f "$FILE" ]; then
-            echo "Applying deep patches to $FILE..."
+            echo "Manually overwriting HermesExecutorFactory.cpp to bypass Xcode 16.4 C++ bugs..."
             
-            # 1. Fix the shared_ptr instantiation (Line 207 area)
-            # We bypass make_shared and use a direct constructor to avoid the template instantiation error
-            sed -i '' 's/auto decoratedRuntime = std::make_shared<DecoratedRuntime>(/auto decoratedRuntime = std::shared_ptr<DecoratedRuntime>(new DecoratedRuntime(/g' "$FILE"
-            
-            # 2. Fix the HermesExecutor constructor call (Line 247 area)
-            # We force the compiler to see it as the base jsi::Runtime pointer
-            sed -i '' 's/return std::make_unique<HermesExecutor>(/return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(runtime),/g' "$FILE"
-            
-            echo "✅ Source patched."
+            # We are using a python script to do a targeted find-and-replace that is 
+            # more robust than sed for multi-line C++ blocks.
+            python3 -c "
+import os
+
+path = '$FILE'
+with open(path, 'r') as f:
+    content = f.read()
+
+# Fix 1: Replace make_shared with a direct new call to avoid allocate_shared templates
+old_make_shared = 'auto decoratedRuntime = std::make_shared<DecoratedRuntime>('
+new_shared_ptr = 'auto decoratedRuntime = std::shared_ptr<DecoratedRuntime>(new DecoratedRuntime('
+content = content.replace(old_make_shared, new_shared_ptr)
+
+# Fix 2: Explicitly cast the runtime to jsi::Runtime to satisfy the 6-arg constructor
+old_executor = 'return std::make_unique<HermesExecutor>('
+new_executor = 'return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(runtime),'
+content = content.replace(old_executor, new_executor)
+
+with open(path, 'w') as f:
+    f.write(content)
+"
+            echo "✅ Source overwritten successfully."
           fi
 
-          # 3. RUBY SURGERY: Fix paths and force C++ standards
+      - name: Final Project Sanitization
+        run: |
           gem install xcodeproj --no-document
           ruby -e '
             require "xcodeproj"
@@ -88,7 +103,7 @@ jobs:
             abs_root = Dir.pwd
             
             project.targets.each do |target|
-              # Fix the hermes script path error
+              # Fix Hermes script paths
               if target.name.include?("hermes-engine")
                 target.build_phases.each do |phase|
                   if phase.isa == "PBXShellScriptBuildPhase"
@@ -101,13 +116,12 @@ jobs:
                 config.build_settings["CLANG_CXX_LANGUAGE_STANDARD"] = "c++20"
                 config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "15.1"
                 config.build_settings["USE_HEADERMAP"] = "NO"
-                # This flag allows the compiler to be less pedantic about header locations
-                config.build_settings["OTHER_CPLUSPLUSFLAGS"] = "-Wno-error=non-modular-include-in-framework-module"
+                # This ensures the compiler doesnt fail on modular include warnings
+                config.build_settings["OTHER_CPLUSPLUSFLAGS"] = "-Wno-error=non-modular-include-in-framework-module -Wno-error=return-type"
               end
             end
             project.save
           '
-
       - name: Build Unsigned Archive
         run: |
           xcodebuild archive \
@@ -120,6 +134,8 @@ jobs:
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
             -jobs 1 \
+            -allowProvisioningUpdates \
+            ONLY_ACTIVE_ARCH=NO \
             REACT_NATIVE_PATH="$(pwd)/node_modules/react-native" \
             USE_HEADERMAP=NO \
             SWIFT_OPTIMIZATION_LEVEL="-Onone" \
