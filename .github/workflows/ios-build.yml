@@ -169,7 +169,6 @@ jobs:
             CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES=YES \
             VALIDATE_WORKSPACE=NO \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
-            OTHER_CFLAGS="-Wno-ambiguous-column-numbers" \
             GCC_PRECOMPILE_PREFIX_HEADER=NO \
             SWIFT_COMPILATION_MODE=wholemodule \
             SWIFT_OPTIMIZATION_LEVEL="-Onone" \
