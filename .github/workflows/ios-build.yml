@@ -77,20 +77,21 @@ jobs:
           gem install xcodeproj --no-document
           ruby -e "
             require 'xcodeproj'
-            kill_list = ['FBReactNativeSpec', 'Constants.manifest', 'Hermes', '[Expo] Configure', 'Bundle React Native']
+            # Scripts that must run but cause dependency loops in Xcode 16.4
+            target_phases = ['FBReactNativeSpec', 'Hermes', '[Expo] Configure', 'Bundle React Native']
+            
             Dir.glob('ios/**/*.xcodeproj').each do |path|
               project = Xcodeproj::Project.open(path)
               modified = false
               project.targets.each do |target|
-                target.build_phases.delete_if do |phase|
-                  if phase.isa == 'PBXShellScriptBuildPhase' && kill_list.any? { |k| (phase.name || '').include?(k) }
-                    # Strip dependency paths to prevent the compiler from waiting for missing assets
-                    phase.input_file_list_paths&.clear
-                    phase.output_file_list_paths&.clear
-                    phase.input_paths&.clear
-                    phase.output_paths&.clear
+                target.build_phases.each do |phase|
+                  if phase.isa == 'PBXShellScriptBuildPhase' && target_phases.any? { |k| (phase.name || '').include?(k) }
+                    # Strip the lists that trigger the 'Dependency Analysis' hang
+                    phase.input_paths = []
+                    phase.output_paths = []
+                    phase.input_file_list_paths = []
+                    phase.output_file_list_paths = []
                     modified = true
-                    true
                   end
                 end
               end
@@ -124,6 +125,7 @@ jobs:
         run: |
           xcodebuild archive \
           HEADER_SEARCH_PATHS='$(inherited) "${PODS_ROOT}/Headers/Public/React-graphics" "${PODS_ROOT}/Headers/Public/React-renderer-graphics"' \
+          HEADER_SEARCH_PATHS='$(inherited) ${SRCHROOT}/node_modules/react-native/ReactCommon' \
             -workspace ios/ProjectLightHouseReactApp.xcworkspace \
             -scheme ProjectLightHouseReactApp \
             -configuration Release \
