@@ -78,32 +78,39 @@ jobs:
           ruby -e "
             require 'xcodeproj'
             project_path = 'ios/Pods/Pods.xcodeproj'
-            project = Xcodeproj::Project.open(project_path)
             
-            # 1. Fix the Hermes path resolution
-            project.targets.each do |target|
-              if target.name.include?('hermes-engine')
-                target.build_phases.each do |phase|
-                  if phase.isa == 'PBXShellScriptBuildPhase' && phase.shell_script.include?('with-environment.sh')
-                    # Replace the broken relative path with an explicit node_modules path
-                    phase.shell_script = phase.shell_script.gsub(
-                      /\".*\/scripts\/xcode\/with-environment.sh\"/, 
-                      '\"$SRCROOT/../../node_modules/react-native/scripts/xcode/with-environment.sh\"'
-                    )
+            # Skip if Pods project doesn't exist yet (safety check)
+            if File.exist?(project_path)
+              project = Xcodeproj::Project.open(project_path)
+              
+              # 1. Generate the guaranteed absolute path to the node_modules folder
+              absolute_env_path = \"#{Dir.pwd}/node_modules/react-native/scripts/xcode/with-environment.sh\"
+              
+              # 2. Inject the absolute path into the Hermes target
+              project.targets.each do |target|
+                if target.name.include?('hermes-engine')
+                  target.build_phases.each do |phase|
+                    if phase.isa == 'PBXShellScriptBuildPhase' && phase.shell_script.include?('with-environment.sh')
+                      # Replace ANY broken relative path with the absolute CI path
+                      phase.shell_script = phase.shell_script.gsub(
+                        /[\\S]+\/with-environment\\.sh/, 
+                        \"\\\"\#\{absolute_env_path\}\\\"\"
+                      )
+                    end
                   end
                 end
               end
-            end
-            
-            # 2. Re-apply the script dependency strip (from previous steps)
-            kill_list = ['FBReactNativeSpec', 'Constants.manifest', '[Expo] Configure', 'Bundle React Native']
-            project.targets.each do |target|
-              target.build_phases.delete_if do |phase|
-                phase.isa == 'PBXShellScriptBuildPhase' && kill_list.any? { |k| (phase.name || '').include?(k) }
+              
+              # 3. Strip the other dependency loops
+              kill_list = ['FBReactNativeSpec', 'Constants.manifest', '[Expo] Configure', 'Bundle React Native']
+              project.targets.each do |target|
+                target.build_phases.delete_if do |phase|
+                  phase.isa == 'PBXShellScriptBuildPhase' && kill_list.any? { |k| (phase.name || '').include?(k) }
+                end
               end
+              
+              project.save
             end
-            
-            project.save
           "
      
       - name: Manual Module Map Emplacement
