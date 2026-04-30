@@ -72,26 +72,23 @@ jobs:
             # We are using a python script to do a targeted find-and-replace that is 
             # more robust than sed for multi-line C++ blocks.
             python3 -c "
-import os
+            import os
 
-path = '$FILE'
-with open(path, 'r') as f:
-    content = f.read()
+            path = '$FILE'
+            with open(path, 'r') as f:
+            content = f.read()
 
-# Fix 1: Replace make_shared with a direct new call to avoid allocate_shared templates
-old_make_shared = 'auto decoratedRuntime = std::make_shared<DecoratedRuntime>('
-new_shared_ptr = 'auto decoratedRuntime = std::shared_ptr<DecoratedRuntime>(new DecoratedRuntime('
-content = content.replace(old_make_shared, new_shared_ptr)
+            # Fix 1: Replace make_shared with a direct new call to avoid allocate_shared templates
+            old_make_shared = 'auto decoratedRuntime = std::make_shared<DecoratedRuntime>('
+            new_shared_ptr = 'auto decoratedRuntime = std::shared_ptr<DecoratedRuntime>(new DecoratedRuntime('
+            content = content.replace(old_make_shared, new_shared_ptr)
 
-# Fix 2: Explicitly cast the runtime to jsi::Runtime to satisfy the 6-arg constructor
-old_executor = 'return std::make_unique<HermesExecutor>('
-new_executor = 'return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(runtime),'
-content = content.replace(old_executor, new_executor)
+            # Fix 2: Explicitly cast the runtime to jsi::Runtime to satisfy the 6-arg constructor
+            old_executor = 'return std::make_unique<HermesExecutor>('
+            new_executor = 'return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(runtime),'
+            content = content.replace(old_executor, new_executor)
 
-with open(path, 'w') as f:
-    f.write(content)
-"
-            echo "✅ Source overwritten successfully."
+
           fi
 
       - name: Final Project Sanitization
