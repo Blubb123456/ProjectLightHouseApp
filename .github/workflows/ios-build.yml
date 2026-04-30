@@ -87,6 +87,8 @@ jobs:
                     # Strip dependency paths to prevent the compiler from waiting for missing assets
                     phase.input_paths&.clear
                     phase.output_paths&.clear
+                    phase.input_paths&.clear
+                    phase.output_paths&.clear
                     modified = true
                     true
                   end
