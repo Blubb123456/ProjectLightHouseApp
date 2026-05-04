@@ -1,4 +1,4 @@
-name: Build ProjectLighthouse IPA (Unsigned)
+name: Build ProjectLighthouse IPA (No Apple ID)
 on: [workflow_dispatch]
 
 jobs:
@@ -8,18 +8,27 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # --- Step 1: Environment Setup ---
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18
+          cache: 'yarn'
 
       - name: Install Dependencies
-        run: |
-          yarn install
-          cd ios && pod install && cd ..
+        run: yarn install
 
-      # --- Step 2: Build the .app Bundle ---
+      # --- Step 1: Generate the iOS Folder ---
+      - name: Expo Prebuild
+        run: npx expo prebuild --platform ios
+
+      # --- Step 2: Install CocoaPods ---
+      - name: Install Pods
+        run: |
+          cd ios
+          pod install
+          cd ..
+
+      # --- Step 3: Build the .app Bundle (Unsigned) ---
       - name: Build Archive
         run: |
           xcodebuild archive \
@@ -28,18 +37,21 @@ jobs:
             -configuration Release \
             -sdk iphoneos \
             -archivePath $PWD/build/ProjectLighthouse.xcarchive \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES
 
-      # --- Step 3: Package as IPA (JustFrederik's Logic) ---
+      # --- Step 4: Package as IPA (JustFrederik Logic) ---
       - name: Convert .app to .ipa
         run: |
           mkdir -p Payload
-          # Copy the .app bundle from the archive to the Payload folder
-          cp -r build/ProjectLighthouse.xcarchive/Products/Applications/ProjectLighthouse.app Payload/
-          # Zip the Payload folder and rename to .ipa
+          # Finds the .app folder inside the archive automatically
+          APP_PATH=$(find build/ProjectLighthouse.xcarchive -name "*.app" -type d | head -n 1)
+          cp -r "$APP_PATH" Payload/
           zip -r ProjectLighthouse.ipa Payload
           
-      # --- Step 4: Upload the Result ---
+      # --- Step 5: Upload the Result ---
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
