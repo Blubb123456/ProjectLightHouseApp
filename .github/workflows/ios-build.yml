@@ -122,9 +122,6 @@ jobs:
             -parallelizeTargets=NO \
             -jobs 1 \
             OTHER_CPLUSPLUSFLAGS="-Wno-error=non-modular-include-in-framework-module -Wno-error=return-type -Wno-error=reorder-ctor" \
-            REACT_NATIVE_PATH="$REACT_NATIVE_PATH" \
-            USE_HEADERMAP=NO \
-            CLANG_ENABLE_MODULES=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
