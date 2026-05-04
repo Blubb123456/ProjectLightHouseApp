@@ -12,10 +12,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 18
-          cache: 'yarn'
+          # Removed the cache line to prevent the lock file error
 
       - name: Install Dependencies
-        run: yarn install
+        run: |
+          # Use npm if you don't have a yarn.lock file
+          if [ -f "yarn.lock" ]; then
+            yarn install
+          else
+            npm install
+          fi
 
       # --- Step 1: Generate the iOS Folder ---
       - name: Expo Prebuild
