@@ -31,19 +31,16 @@ jobs:
       - name: Install Pods
         run: |
           cd ios
-          # This adds a post-install hook to disable signing for all pods
-          cat <<EOF >> Podfile
+          
+          # 1. Define the fix we want to inject
+          FIX_LOGIC="    installer.pods_project.targets.each do |target|\n      target.build_configurations.each do |config|\n        config.build_settings['EXPANDED_CODE_SIGN_IDENTITY'] = ''\n        config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'\n        config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'\n      end\n    end"
 
-          post_install do |installer|
-          installer.pods_project.targets.each do |target|
-          target.build_configurations.each do |config|
-          config.build_settings['EXPANDED_CODE_SIGN_IDENTITY'] = ""
-          config.build_settings['CODE_SIGNING_REQUIRED'] = "NO"
-          config.build_settings['CODE_SIGNING_ALLOWED'] = "NO"
-          end
-          end
-          end
-          EOF
+          # 2. Use sed to insert the fix right after Expo's 'post_install do |installer|' line
+          sed -i '' "/post_install do |installer|/a\\
+          $FIX_LOGIC
+          " Podfile
+
+          # 3. Now run the install
           pod install
           cd ..
 
