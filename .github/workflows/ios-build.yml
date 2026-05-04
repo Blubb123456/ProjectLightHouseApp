@@ -72,26 +72,38 @@ jobs:
           EOF
           pod install
 
-      - name: Overwrite Hermes Source (Regex Preservation)
+      - name: Overwrite Hermes Source (Fixed Syntax)
         run: |
           FILE="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
           if [ -f "$FILE" ]; then
             python3 -c "
-          import re, os
+          import os
           path = '$FILE'
           with open(path, 'r') as f:
               content = f.read()
+
+          # 1. Add missing headers
           if '#include <thread>' not in content:
               content = '#include <thread>\n#include <atomic>\n' + content
+
+          # 2. Fix thread ID ambiguity
           content = content.replace('std::thread::id expected', 'auto expected')
-          content = re.sub(r'std::make_shared<DecoratedRuntime>\(', 
-                           r'std::shared_ptr<DecoratedRuntime>(new DecoratedRuntime(', content)
-          content = re.sub(r'return std::make_unique<HermesExecutor>\(\s*runtime,', 
-                           r'return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(runtime),', content)
+
+          # 3. Fix the shared_ptr constructor (Surgical Replace)
+          # We replace the specific make_shared call with the explicit 'new' allocation
+          old_shared = 'std::make_shared<DecoratedRuntime>(runtime, debuggerName_)'
+          new_shared = 'std::shared_ptr<DecoratedRuntime>(new DecoratedRuntime(runtime, debuggerName_))'
+          content = content.replace(old_shared, new_shared)
+
+          # 4. Fix the HermesExecutor constructor cast
+          old_make_unique = 'return std::make_unique<HermesExecutor>(runtime,'
+          new_make_unique = 'return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(runtime),'
+          content = content.replace(old_make_unique, new_make_unique)
+
           with open(path, 'w') as f:
               f.write(content)
           "
-            echo "✅ Source patched using Regex preservation."
+            echo "✅ Source patched with fixed parentheses."
           fi
           
       - name: Build Unsigned Archive
