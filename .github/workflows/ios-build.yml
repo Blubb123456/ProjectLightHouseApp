@@ -53,20 +53,20 @@ jobs:
                 target.build_configurations.each do |config|
                   config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
                   config.build_settings['GCC_PRECOMPILE_PREFIX_HEADER'] = 'NO'
-                  config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'c++20'
-                  config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
                   config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-                  # Force-disable signing for all sub-pods
                   config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
                   config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
-                end
-                target.build_phases.each do |phase|
-                  if phase.respond_to?(:shell_script)
-                    abs_path = "#{Dir.pwd}/.."
-                    phase.shell_script = "export REACT_NATIVE_PATH=\"#{abs_path}/node_modules/react-native\"\n" + phase.shell_script
-                  end
+                  
+                  # THE FIX: This tells the compiler to ignore the nullability warnings 
+                  # that are currently crashing your build.
+                  config.build_settings['WARNING_CFLAGS'] = [
+                    '$(inherited)', 
+                    '-Wno-nullability-completeness', 
+                    '-Wno-non-modular-include-in-framework-module'
+                  ]
                 end
               end
+            end
             end
           end
           EOF
@@ -109,7 +109,6 @@ jobs:
       - name: Build Unsigned Archive
         run: |
           rm -rf build/DerivedData
-          export REACT_NATIVE_PATH="$(pwd)/node_modules/react-native"
           
           xcodebuild archive \
             -workspace ios/ProjectLightHouseReactApp.xcworkspace \
@@ -121,13 +120,13 @@ jobs:
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
             -jobs 1 \
-            OTHER_CPLUSPLUSFLAGS="-Wno-error=non-modular-include-in-framework-module -Wno-error=return-type -Wno-error=reorder-ctor" \
+            OTHER_CFLAGS="-Wno-nullability-completeness" \
+            OTHER_CPLUSPLUSFLAGS="-Wno-nullability-completeness -Wno-error=non-modular-include-in-framework-module -Wno-error=return-type" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
             clean archive
-
       - name: Package IPA
         run: |
           mkdir -p build/Payload
