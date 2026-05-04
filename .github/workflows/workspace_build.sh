@@ -1,5 +1,8 @@
 #!/bin/bash
+name: "workspace_build.sh"
 
+on:
+  workflow_dispatch:
 if [ $# -eq 0 ]; then
     echo "Error: No argument provided. Please provide at least one argument."
     exit 1  
