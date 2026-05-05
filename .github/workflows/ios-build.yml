@@ -42,36 +42,35 @@ jobs:
           install! 'cocoapods', :deterministic_uuids => false
 
           target 'ProjectLightHouseReactApp' do
-          use_expo_modules!
-          config = use_native_modules!
+            use_expo_modules!
+            config = use_native_modules!
 
-          use_react_native!(
-          :path => config[:reactNativePath],
-          :hermes_enabled => true,
-          :fabric_enabled => false,
-          :new_arch_enabled => false
-          )
+            use_react_native!(
+              :path => config[:reactNativePath],
+              :hermes_enabled => true,
+              :fabric_enabled => false,
+              :new_arch_enabled => false
+            )
 
-          post_install do |installer|
-          installer.pods_project.targets.each do |target|
-          target.build_configurations.each do |config|
-          config.build_settings['CLANG_ENABLE_EXPLICIT_MODULES'] = 'NO'
-          config.build_settings['CLANG_ENABLE_MODULE_DEBUGGING'] = 'NO'
-          config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-          config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
-          config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
-          config.build_settings['CODE_SIGN_IDENTITY'] = ''
-          config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-          end
+            post_install do |installer|
+              installer.pods_project.targets.each do |target|
+                target.build_configurations.each do |config|
+                  config.build_settings['CLANG_ENABLE_EXPLICIT_MODULES'] = 'NO'
+                  config.build_settings['CLANG_ENABLE_MODULE_DEBUGGING'] = 'NO'
+                  config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+                  config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+                  config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
+                  config.build_settings['CODE_SIGN_IDENTITY'] = ''
+                  config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+                end
 
-          target.build_phases.each do |phase|
-          if phase.respond_to?(:shell_script) && phase.shell_script
-          phase.shell_script = "set -e\nset -o pipefail\nexport REACT_NATIVE_PATH=\"$PROJECT_DIR/../node_modules/react-native\"\n" + phase.shell_script
-          end
-          end
-          end
-          end
-          end
+                target.build_phases.each do |phase|
+                  if phase.respond_to?(:shell_script) && phase.shell_script
+                    phase.shell_script = "set -e\nset -o pipefail\nexport REACT_NATIVE_PATH=\"$PROJECT_DIR/../node_modules/react-native\"\n" + phase.shell_script
+                  end
+                end
+              end
+            end
           end
           EOF
           pod install
@@ -86,11 +85,9 @@ jobs:
           
           echo "Fixing glog at: $GLOG_PATH"
           
-          # Force create the directory and set open permissions
           sudo mkdir -p "$GLOG_PATH/src"
           sudo chmod -R 777 "$GLOG_PATH"
 
-          # Use sudo tee to write the files since simple redirection (>) is failing
           sudo tee "$GLOG_PATH/src/utilities.cc" > /dev/null <<EOF
           namespace google {
             void InitVLOG3__(int** a, int* b, const char* c, int d) {}
@@ -113,50 +110,46 @@ jobs:
           #define HAVE_UNISTD_H 1
           EOF
 
-          # Final permission sweep to ensure Xcode can read them
           sudo chmod -R 755 "$GLOG_PATH"
           
-      - name: Overwrite Hermes Source (Fixed Syntax)
+      - name: Overwrite Hermes Source
         run: |
           FILE="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
           if [ -f "$FILE" ]; then
-            python3 -c "
+            cat << 'EOF' > patch_hermes.py
           import os
-          path = '$FILE'
+          path = 'node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp'
           with open(path, 'r') as f:
               content = f.read()
 
-          # 1. Add missing headers
           if '#include <thread>' not in content:
               content = '#include <thread>\n#include <atomic>\n' + content
 
-          # 2. Fix thread ID ambiguity
           content = content.replace('std::thread::id expected', 'auto expected')
 
-          # 3. Fix the shared_ptr constructor (Surgical Replace)
-          # We replace the specific make_shared call with the explicit 'new' allocation
           old_shared = 'std::make_shared<DecoratedRuntime>(runtime, debuggerName_)'
           new_shared = 'std::shared_ptr<DecoratedRuntime>(new DecoratedRuntime(runtime, debuggerName_))'
           content = content.replace(old_shared, new_shared)
 
-          # 4. Fix the HermesExecutor constructor cast
           old_make_unique = 'return std::make_unique<HermesExecutor>(runtime,'
           new_make_unique = 'return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(runtime),'
           content = content.replace(old_make_unique, new_make_unique)
 
           with open(path, 'w') as f:
               f.write(content)
-          "
-            echo "✅ Source patched with fixed parentheses."
+          EOF
+            python3 patch_hermes.py
+            echo "✅ Source patched."
           fi
+
       - name: Prep Build Directories
         run: |
           sudo rm -rf build
           mkdir -p build
           sudo chmod -R 777 build     
+
       - name: Build Unsigned Archive
         run: |
-          # Manually fix glog if it's broken
           cd ios/Pods/glog && ./configure || true
           cd ../../../
           
@@ -183,17 +176,14 @@ jobs:
           ls -R build/DerivedData || echo "DerivedData is empty"
           mkdir -p build/Payload
           
-          # Check if the archive actually exists
           if [ ! -d "build/ProjectLighthouse.xcarchive" ]; then
             echo "Error: Archive not found! The xcodebuild step must have failed."
             exit 1
           fi
 
-          # Find the .app folder dynamically within the archive
           APP_PATH=$(find build/ProjectLighthouse.xcarchive -name "*.app" | head -n 1)
           echo "App found at: $APP_PATH"
           
-          # Copy to Payload and zip it
           cp -R "$APP_PATH" build/Payload/
           cd build
           zip -r ProjectLighthouse.ipa Payload
