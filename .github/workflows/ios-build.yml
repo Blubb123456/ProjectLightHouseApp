@@ -147,7 +147,12 @@ jobs:
           sudo rm -rf build
           mkdir -p build
           sudo chmod -R 777 build     
-
+      - name: Force React Native Bundle Environment
+        run: |
+          export NODE_BINARY=$(command -v node)
+          echo "export NODE_BINARY=$NODE_BINARY" > ios/.xcode.env.local
+          echo "✅ .xcode.env.local created with node path: $NODE_BINARY"
+      
       - name: Build Unsigned Archive
         run: |
           cd ios/Pods/glog && ./configure || true
@@ -165,11 +170,16 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
-            DEVELOPMENT_TEAM="" \
             COMPILER_INDEX_STORE_ENABLE=NO \
             SUPPORTS_MACCATALYST=NO \
-            GENERATE_INFOPLIST_FILE=YES \
-            clean archive
+            GENERATE_INFOPLIST_FILE=YES | tee xcodebuild.log | xcpretty || true
+
+          # If the build failed, find the actual error in the log
+          if [ ! -d "build/ProjectLighthouse.xcarchive" ]; then
+            echo "❌ BUILD FAILED. Extracting actual error..."
+            grep -A 5 "error:" xcodebuild.log || tail -n 50 xcodebuild.log
+            exit 1
+          fi
             
       - name: Package IPA
         run: |
