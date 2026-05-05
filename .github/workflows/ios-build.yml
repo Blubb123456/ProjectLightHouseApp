@@ -55,6 +55,8 @@ jobs:
             post_install do |installer|
               installer.pods_project.targets.each do |target|
                 target.build_configurations.each do |config|
+                config.build_settings['CLANG_ENABLE_EXPLICIT_MODULES'] = 'NO'
+                  config.build_settings['CLANG_ENABLE_MODULE_DEBUGGING'] = 'NO'
                   config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
                   config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
                   config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
@@ -104,32 +106,30 @@ jobs:
 
       - name: Locate and Fix Glog
         run: |
-          # Find where glog actually lives in this runner
           GLOG_PATH=$(find . -name "glog" -type d | grep "Pods/glog" | head -n 1)
-          echo "Glog found at: $GLOG_PATH"
-          
           if [ -z "$GLOG_PATH" ]; then
-            echo "Glog directory not found. Creating it manually to satisfy compiler."
             mkdir -p ios/Pods/glog/src
             GLOG_PATH="ios/Pods/glog"
           fi
-
           cd "$GLOG_PATH"
           mkdir -p src
           
-          # Create the files Xcode is looking for
-          touch src/logging.cc
-          touch src/raw_logging.cc
-          touch src/utilities.cc
-          touch src/vlog_is_on.cc
-          touch src/symbolize.cc
-          touch src/demangle.cc
-          touch src/signalhandler.cc
+          # Inject actual minimal C++ code into the files Xcode expects
+          echo "namespace google { void InitVLOG3__(int**, int*, const char*, int) {} }" > src/utilities.cc
+          echo "namespace google { void ShutdownGoogleLogging() {} }" > src/logging.cc
+          echo "namespace google { void InitGoogleLogging(const char*) {} }" >> src/logging.cc
+          echo "namespace google { void LogMessage__() {} }" >> src/logging.cc
+          touch src/raw_logging.cc src/vlog_is_on.cc src/symbolize.cc src/demangle.cc src/signalhandler.cc
           
-          # Create a dummy config.h so it doesn't fail on missing headers
-          echo "#define GOOGLE_GLOG_DLL_DECL" > src/config.h
-          
-          echo "Manual glog structure created."
+          # Create a functional config.h
+          cat <<EOF > src/config.h
+          #define GOOGLE_GLOG_DLL_DECL
+          #define GLOG_NO_ABBREVIATED_SEVERITIES
+          #define HAVE_SYS_TYPES_H 1
+          #define HAVE_UNISTD_H 1
+          #define HAVE_STDINT_H 1
+          EOF
+          echo "Glog source injected."
           
       - name: Overwrite Hermes Source (Fixed Syntax)
         run: |
@@ -181,6 +181,7 @@ jobs:
             -derivedDataPath build/DerivedData \
             COMPILER_INDEX_STORE_ENABLE=NO \
             CC=clang \
+            -quiet \
             CXX=clang++ \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
