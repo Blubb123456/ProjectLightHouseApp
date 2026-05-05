@@ -65,6 +65,13 @@ jobs:
                   config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
                   config.build_settings['GCC_OPTIMIZATION_LEVEL'] = '0'
                   config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+                  if target.name == 'hermes-engine'
+                  target.build_phases.each do |phase|
+                    if phase.respond_to?(:shell_script)
+                      # Fix the relative path for the environment script
+                      phase.shell_script = "export REACT_NATIVE_PATH=\"$(pwd)/../node_modules/react-native\"\n" + phase.shell_script
+                      end
+                  end
                 end
               end
 
@@ -121,6 +128,7 @@ jobs:
           
       - name: Build Unsigned Archive
         run: |
+          export NODE_BINARY=$(command -v node)
           rm -rf build/DerivedData
           
           xcodebuild archive \
@@ -133,6 +141,7 @@ jobs:
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
             -jobs 1 \
+            REACT_NATIVE_PATH="$(pwd)/node_modules/react-native" \
             SKIP_INSTALL=NO \
             archiveSucceeded=true \
             SWIFT_OPTIMIZATION_LEVEL="-Onone" \
