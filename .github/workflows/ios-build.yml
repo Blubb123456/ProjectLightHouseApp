@@ -55,7 +55,6 @@ jobs:
           post_install do |installer|
           installer.pods_project.targets.each do |target|
           target.build_configurations.each do |config|
-          # Fix Clang noise and CI Signing
           config.build_settings['CLANG_ENABLE_EXPLICIT_MODULES'] = 'NO'
           config.build_settings['CLANG_ENABLE_MODULE_DEBUGGING'] = 'NO'
           config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
@@ -65,15 +64,14 @@ jobs:
           config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
           end
 
-          # Force script phases to be verbose and handle environment paths
           target.build_phases.each do |phase|
           if phase.respond_to?(:shell_script) && phase.shell_script
           phase.shell_script = "set -e\nset -o pipefail\nexport REACT_NATIVE_PATH=\"$PROJECT_DIR/../node_modules/react-native\"\n" + phase.shell_script
           end
           end
-          end # end targets loop
-          end # end post_install
-          end # end target block
+          end
+          end
+          end
           end
           EOF
           pod install
