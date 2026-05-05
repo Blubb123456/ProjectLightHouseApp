@@ -71,6 +71,10 @@ jobs:
                     config.build_settings['HEADER_SEARCH_PATHS'] = '$(inherited) "${PODS_ROOT}/glog/src"'
                   end
                 end
+                target.build_phases.each do |phase|
+                  if phase.respond_to?(:shell_script)
+                    phase.shell_script = "set -e\nset -o pipefail\n" + phase.shell_script
+                  end
 
                 # FORCE HERMES PATHS
                 if target.name == 'hermes-engine' || target.name.include?('React')
@@ -190,6 +194,7 @@ jobs:
             
       - name: Package IPA
         run: |
+          ls -R build/DerivedData || echo "DerivedData is empty"
           mkdir -p build/Payload
           
           # Check if the archive actually exists
