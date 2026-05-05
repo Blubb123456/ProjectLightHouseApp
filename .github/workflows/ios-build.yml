@@ -81,24 +81,28 @@ jobs:
           EOF
           pod install
 
-      - name: Locate and Fix Glog
+      - name: Force Fix Glog Permissions and Source
         run: |
           GLOG_PATH=$(find . -name "glog" -type d | grep "Pods/glog" | head -n 1)
           if [ -z "$GLOG_PATH" ]; then
-            mkdir -p ios/Pods/glog/src
+            sudo mkdir -p ios/Pods/glog/src
             GLOG_PATH="ios/Pods/glog"
           fi
-          cd "$GLOG_PATH"
-          mkdir -p src
           
-          # Actual minimal code that glog expects to link
-          cat <<EOF > src/utilities.cc
+          echo "Fixing glog at: $GLOG_PATH"
+          
+          # Force create the directory and set open permissions
+          sudo mkdir -p "$GLOG_PATH/src"
+          sudo chmod -R 777 "$GLOG_PATH"
+
+          # Use sudo tee to write the files since simple redirection (>) is failing
+          sudo tee "$GLOG_PATH/src/utilities.cc" > /dev/null <<EOF
           namespace google {
             void InitVLOG3__(int** a, int* b, const char* c, int d) {}
           }
           EOF
           
-          cat <<EOF > src/logging.cc
+          sudo tee "$GLOG_PATH/src/logging.cc" > /dev/null <<EOF
           namespace google {
             void InitGoogleLogging(const char* a) {}
             void ShutdownGoogleLogging() {}
@@ -106,13 +110,16 @@ jobs:
           }
           EOF
           
-          touch src/raw_logging.cc src/vlog_is_on.cc src/symbolize.cc src/demangle.cc src/signalhandler.cc
+          sudo touch "$GLOG_PATH/src/raw_logging.cc" "$GLOG_PATH/src/vlog_is_on.cc" "$GLOG_PATH/src/symbolize.cc" "$GLOG_PATH/src/demangle.cc" "$GLOG_PATH/src/signalhandler.cc"
           
-          cat <<EOF > src/config.h
+          sudo tee "$GLOG_PATH/src/config.h" > /dev/null <<EOF
           #define GOOGLE_GLOG_DLL_DECL
           #define HAVE_SYS_TYPES_H 1
           #define HAVE_UNISTD_H 1
           EOF
+
+          # Final permission sweep to ensure Xcode can read them
+          sudo chmod -R 755 "$GLOG_PATH"
           
       - name: Overwrite Hermes Source (Fixed Syntax)
         run: |
