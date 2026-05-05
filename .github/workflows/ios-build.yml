@@ -159,7 +159,11 @@ jobs:
           "
             echo "✅ Source patched with fixed parentheses."
           fi
-          
+      - name: Prep Build Directories
+        run: |
+          sudo rm -rf build
+          mkdir -p build
+          sudo chmod -R 777 build     
       - name: Build Unsigned Archive
         run: |
           # Manually fix glog if it's broken
@@ -173,16 +177,16 @@ jobs:
             -archivePath $(pwd)/build/ProjectLighthouse.xcarchive \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
-            -derivedDataPath build/DerivedData \
-            -parallelizeTargets=NO \
-            -jobs 1 \
-            CLANG_ENABLE_EXPLICIT_MODULES=NO \
+            -derivedDataPath $(pwd)/build/DerivedData \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            DEVELOPMENT_TEAM="" \
             COMPILER_INDEX_STORE_ENABLE=NO \
-            clean archive | xcpretty
+            SUPPORTS_MACCATALYST=NO \
+            GENERATE_INFOPLIST_FILE=YES \
+            clean archive
             
       - name: Package IPA
         run: |
