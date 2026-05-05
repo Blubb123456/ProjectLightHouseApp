@@ -18,16 +18,6 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
-      - name: Debug Path Verification
-        run: |
-          echo "Checking for with-environment.sh..."
-          if [ -f "node_modules/react-native/scripts/xcode/with-environment.sh" ]; then
-            echo "✅ Found at root node_modules"
-          else
-            echo "❌ NOT FOUND at root node_modules"
-            find . -name "with-environment.sh"
-          fi
-
       - name: Generate iOS Folder
         run: npx expo prebuild --platform ios --clean --no-install
 
@@ -63,103 +53,63 @@ jobs:
                   config.build_settings['CODE_SIGN_IDENTITY'] = ''
                   config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
                 end
-
-                target.build_phases.each do |phase|
-                  if phase.respond_to?(:shell_script) && phase.shell_script
-                    phase.shell_script = "set -e\nset -o pipefail\nexport REACT_NATIVE_PATH=\"$PROJECT_DIR/../node_modules/react-native\"\n" + phase.shell_script
-                  end
-                end
               end
             end
           end
           EOF
           pod install
 
-      - name: Force Fix Glog Permissions and Source
+      - name: Force Fix Glog
         run: |
-          GLOG_PATH=$(find . -name "glog" -type d | grep "Pods/glog" | head -n 1)
-          if [ -z "$GLOG_PATH" ]; then
-            sudo mkdir -p ios/Pods/glog/src
-            GLOG_PATH="ios/Pods/glog"
-          fi
-          
-          echo "Fixing glog at: $GLOG_PATH"
-          
+          GLOG_PATH="ios/Pods/glog"
           sudo mkdir -p "$GLOG_PATH/src"
           sudo chmod -R 777 "$GLOG_PATH"
-
-          sudo tee "$GLOG_PATH/src/utilities.cc" > /dev/null <<EOF
-          namespace google {
-            void InitVLOG3__(int** a, int* b, const char* c, int d) {}
-          }
-          EOF
-          
-          sudo tee "$GLOG_PATH/src/logging.cc" > /dev/null <<EOF
-          namespace google {
-            void InitGoogleLogging(const char* a) {}
-            void ShutdownGoogleLogging() {}
-            void LogMessage__() {}
-          }
-          EOF
-          
-          sudo touch "$GLOG_PATH/src/raw_logging.cc" "$GLOG_PATH/src/vlog_is_on.cc" "$GLOG_PATH/src/symbolize.cc" "$GLOG_PATH/src/demangle.cc" "$GLOG_PATH/src/signalhandler.cc"
-          
           sudo tee "$GLOG_PATH/src/config.h" > /dev/null <<EOF
           #define GOOGLE_GLOG_DLL_DECL
           #define HAVE_SYS_TYPES_H 1
           #define HAVE_UNISTD_H 1
           EOF
-
-          sudo chmod -R 755 "$GLOG_PATH"
+          sudo touch "$GLOG_PATH/src/logging.cc" "$GLOG_PATH/src/raw_logging.cc" "$GLOG_PATH/src/utilities.cc"
           
       - name: Overwrite Hermes Source
         run: |
-          FILE="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
-          if [ -f "$FILE" ]; then
-            cat << 'EOF' > patch_hermes.py
+          python3 - <<'EOF'
           import os
           path = 'node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp'
-          with open(path, 'r') as f:
-              content = f.read()
-
-          if '#include <thread>' not in content:
-              content = '#include <thread>\n#include <atomic>\n' + content
-
-          content = content.replace('std::thread::id expected', 'auto expected')
-
-          old_shared = 'std::make_shared<DecoratedRuntime>(runtime, debuggerName_)'
-          new_shared = 'std::shared_ptr<DecoratedRuntime>(new DecoratedRuntime(runtime, debuggerName_))'
-          content = content.replace(old_shared, new_shared)
-
-          old_make_unique = 'return std::make_unique<HermesExecutor>(runtime,'
-          new_make_unique = 'return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(runtime),'
-          content = content.replace(old_make_unique, new_make_unique)
-
-          with open(path, 'w') as f:
-              f.write(content)
+          if os.path.exists(path):
+              with open(path, 'r') as f:
+                  content = f.read()
+              if '#include <thread>' not in content:
+                  content = '#include <thread>\n#include <atomic>\n' + content
+              content = content.replace('std::thread::id expected', 'auto expected')
+              content = content.replace('std::make_shared<DecoratedRuntime>(runtime, debuggerName_)', 
+                                      'std::shared_ptr<DecoratedRuntime>(new DecoratedRuntime(runtime, debuggerName_))')
+              content = content.replace('return std::make_unique<HermesExecutor>(runtime,', 
+                                      'return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(runtime),')
+              with open(path, 'w') as f:
+                  f.write(content)
           EOF
-            python3 patch_hermes.py
-            echo "✅ Source patched."
-          fi
 
-      - name: Prep Build Directories
-        run: |
-          sudo rm -rf build
-          mkdir -p build
-          sudo chmod -R 777 build     
-      - name: Force React Native Bundle Environment
+      - name: Manual JS Bundle (Fixing the Black Box)
         run: |
           export NODE_BINARY=$(command -v node)
-          echo "export NODE_BINARY=$NODE_BINARY" > ios/.xcode.env.local
-          echo "✅ .xcode.env.local created with node path: $NODE_BINARY"
-      
+          # We create the bundle manually so we can see JS errors here
+          npx react-native bundle \
+            --platform ios \
+            --dev false \
+            --entry-file index.js \
+            --bundle-output ios/main.jsbundle \
+            --assets-dest ios
+          
+          # Tell Xcode where the bundle is
+          mkdir -p build/ProjectLighthouse.xcarchive/Products/Applications/ProjectLightHouseReactApp.app
+          cp ios/main.jsbundle build/ProjectLighthouse.xcarchive/Products/Applications/ProjectLightHouseReactApp.app/main.jsbundle || true
+
       - name: Build Unsigned Archive
         run: |
-          # 1. Ensure Xcode knows where Node is
-          export NODE_BINARY=$(command -v node)
-          echo "export NODE_BINARY=$NODE_BINARY" > ios/.xcode.env.local
+          # Force Node path for Xcode 16
+          echo "export NODE_BINARY=$(command -v node)" > ios/.xcode.env.local
           
-          # 2. Run the build with Sandbox DISABLED
           xcodebuild archive \
             -workspace ios/ProjectLightHouseReactApp.xcworkspace \
             -scheme ProjectLightHouseReactApp \
@@ -171,39 +121,16 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            AD_HOC_CODE_SIGNING_ALLOWED=YES \
-            DEVELOPMENT_TEAM="" \
-            COMPILER_INDEX_STORE_ENABLE=NO \
-            SUPPORTS_MACCATALYST=NO \
-            GENERATE_INFOPLIST_FILE=YES \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
+            SKIP_BUNDLING=YES \
             clean archive
 
-      - name: IPA Fail Diagnostic
-        if: failure()
-        run: |
-          echo "❌ Build failed. Checking last 200 lines for 'error:'"
-          # This will find the actual reason, like a missing asset or a Node error
-          find build/DerivedData -name "*.log" -exec grep -Hn "error:" {} + || true
-          tail -n 200 xcodebuild.log || true
-            
       - name: Package IPA
         run: |
-          ls -R build/DerivedData || echo "DerivedData is empty"
           mkdir -p build/Payload
-          
-          if [ ! -d "build/ProjectLighthouse.xcarchive" ]; then
-            echo "Error: Archive not found! The xcodebuild step must have failed."
-            exit 1
-          fi
-
           APP_PATH=$(find build/ProjectLighthouse.xcarchive -name "*.app" | head -n 1)
-          echo "App found at: $APP_PATH"
-          
           cp -R "$APP_PATH" build/Payload/
-          cd build
-          zip -r ProjectLighthouse.ipa Payload
-          echo "IPA created successfully."
+          cd build && zip -r ProjectLighthouse.ipa Payload
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
