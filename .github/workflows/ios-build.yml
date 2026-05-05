@@ -53,25 +53,24 @@ jobs:
             )
 
             post_install do |installer|
+              # Loop 1: Fix all Pod targets
               installer.pods_project.targets.each do |target|
                 target.build_configurations.each do |config|
                   config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
                   config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
                   config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
                   config.build_settings['CODE_SIGN_IDENTITY'] = ''
-                  
-                  # THE FIXES FOR ASSET LINKING:
                   config.build_settings['ON_DEMAND_RESOURCES_ENABLED'] = 'NO'
                   config.build_settings['ENABLE_BITCODE'] = 'NO'
-                  
                   config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
                   config.build_settings['GCC_OPTIMIZATION_LEVEL'] = '0'
                   config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
                 end
               end
 
-              installer.aggregate_targets.each do |target|
-                target.user_project.targets.each do |user_target|
+              # Loop 2: Fix the Main Project targets (Crucial for Asset Linking)
+              installer.aggregate_targets.each do |aggregate_target|
+                aggregate_target.user_project.targets.each do |user_target|
                   user_target.build_configurations.each do |config|
                     config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
                     config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
@@ -79,21 +78,10 @@ jobs:
                     config.build_settings['ON_DEMAND_RESOURCES_ENABLED'] = 'NO'
                   end
                 end
-                target.user_project.save
+                aggregate_target.user_project.save
               end
             end
-                  config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-                end # ends build_configurations loop
-
-                target.build_phases.each do |phase|
-                  if phase.respond_to?(:shell_script)
-                    abs_path = "#{Dir.pwd}/.."
-                    phase.shell_script = "export REACT_NATIVE_PATH=\"#{abs_path}/node_modules/react-native\"\n" + phase.shell_script
-                  end
-                end # ends build_phases loop
-              end # ends targets loop
-            end # ends post_install block
-          end # ends target 'ProjectLightHouseReactApp' block
+          end
           EOF
           pod install
 
