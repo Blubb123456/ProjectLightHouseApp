@@ -157,6 +157,9 @@ jobs:
         run: |
           cd ios/Pods/glog && ./configure || true
           cd ../../../
+          # Ensure Node is accessible to Xcode
+          export NODE_BINARY=$(command -v node)
+          echo "export NODE_BINARY=$NODE_BINARY" > ios/.xcode.env.local
           
           xcodebuild archive \
             -workspace ios/ProjectLightHouseReactApp.xcworkspace \
@@ -170,16 +173,21 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            DEVELOPMENT_TEAM="" \
             COMPILER_INDEX_STORE_ENABLE=NO \
             SUPPORTS_MACCATALYST=NO \
-            GENERATE_INFOPLIST_FILE=YES | tee xcodebuild.log | xcpretty || true
+            GENERATE_INFOPLIST_FILE=YES \
+            ENABLE_USER_SCRIPT_SANDBOXING=NO \
+            ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS=NO \
+            clean archive
 
-          # If the build failed, find the actual error in the log
-          if [ ! -d "build/ProjectLighthouse.xcarchive" ]; then
-            echo "❌ BUILD FAILED. Extracting actual error..."
-            grep -A 5 "error:" xcodebuild.log || tail -n 50 xcodebuild.log
-            exit 1
-          fi
+      - name: IPA Fail Diagnostic
+        if: failure()
+        run: |
+          echo "❌ Build failed. Checking last 200 lines for 'error:'"
+          # This will find the actual reason, like a missing asset or a Node error
+          find build/DerivedData -name "*.log" -exec grep -Hn "error:" {} + || true
+          tail -n 200 xcodebuild.log || true
             
       - name: Package IPA
         run: |
