@@ -16,7 +16,9 @@ jobs:
           node-version: 20
 
       - name: Install Dependencies
-        run: npm install
+        run: |
+          npm install
+          npm install --save-dev @react-native/metro-config
 
       - name: Generate iOS Folder
         run: npx expo prebuild --platform ios --clean --no-install
