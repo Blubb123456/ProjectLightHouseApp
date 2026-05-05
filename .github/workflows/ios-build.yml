@@ -55,34 +55,27 @@ jobs:
             post_install do |installer|
               installer.pods_project.targets.each do |target|
                 target.build_configurations.each do |config|
-                  # 1. Disable Sandboxing for CI compatibility
                   config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-                  
-                  # 2. Force No Signing for all sub-pods
                   config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
                   config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
                   config.build_settings['CODE_SIGN_IDENTITY'] = ''
                   
-                  # 3. Silence the Nullability Warnings (The Error 65 Fix)
+                  # THE KEY FIXES:
+                  # Force No Optimization to stop the Swift compiler crash
+                  config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
+                  config.build_settings['GCC_OPTIMIZATION_LEVEL'] = '0'
+                  
+                  # Keep the nullability silence
                   config.build_settings['WARNING_CFLAGS'] = [
                     '$(inherited)', 
                     '-Wno-nullability-completeness', 
                     '-Wno-non-modular-include-in-framework-module'
                   ]
                   
-                  # 4. Standard CI fixes
-                  config.build_settings['GCC_PRECOMPILE_PREFIX_HEADER'] = 'NO'
                   config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
                 end
-
-                # 5. Path fix for React Native scripts in CI
-                target.build_phases.each do |phase|
-                  if phase.respond_to?(:shell_script)
-                    abs_path = "#{Dir.pwd}/.."
-                    phase.shell_script = "export REACT_NATIVE_PATH=\"#{abs_path}/node_modules/react-native\"\n" + phase.shell_script
-                  end
-                end
               end
+            end
             end
           end
           EOF
@@ -136,8 +129,8 @@ jobs:
             -derivedDataPath build/DerivedData \
             -parallelizeTargets=NO \
             -jobs 1 \
-            OTHER_CFLAGS="-Wno-nullability-completeness" \
-            OTHER_CPLUSPLUSFLAGS="-Wno-nullability-completeness -Wno-error=non-modular-include-in-framework-module -Wno-error=return-type" \
+            SWIFT_OPTIMIZATION_LEVEL="-Onone" \
+            COMPILER_INDEX_STORE_ENABLE=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
