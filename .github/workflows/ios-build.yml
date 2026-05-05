@@ -155,12 +155,11 @@ jobs:
       
       - name: Build Unsigned Archive
         run: |
-          cd ios/Pods/glog && ./configure || true
-          cd ../../../
-          # Ensure Node is accessible to Xcode
+          # 1. Ensure Xcode knows where Node is
           export NODE_BINARY=$(command -v node)
           echo "export NODE_BINARY=$NODE_BINARY" > ios/.xcode.env.local
           
+          # 2. Run the build with Sandbox DISABLED
           xcodebuild archive \
             -workspace ios/ProjectLightHouseReactApp.xcworkspace \
             -scheme ProjectLightHouseReactApp \
@@ -178,7 +177,6 @@ jobs:
             SUPPORTS_MACCATALYST=NO \
             GENERATE_INFOPLIST_FILE=YES \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
-            ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS=NO \
             clean archive
 
       - name: IPA Fail Diagnostic
