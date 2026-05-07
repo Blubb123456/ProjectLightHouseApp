@@ -91,7 +91,7 @@ jobs:
             --bundle-output ios/main.jsbundle \
             --assets-dest ios
 
-      - name: Build Unsigned Archive
+      name: Build Unsigned Archive
         run: |
           # 1. Ensure we are using Xcode 16.1 or higher
           sudo xcode-select -s /Applications/Xcode_16.1.app
@@ -106,9 +106,8 @@ jobs:
           echo "Found Workspace: $WORKSPACE"
           echo "Using Scheme: $SCHEME"
 
-          # 4. The RAM-Shielded Build
-          # We are disabling parallelization and indexing, and forcing single-file Swift compilation
-          # to keep the memory footprint as small as possible.
+          # 4. The Fixed RAM-Shielded Build
+          # Changed '-parallelizeTargets NO' to 'ParallelizeTargets=NO' (no dash)
           xcodebuild archive \
             -workspace ios/$WORKSPACE \
             -scheme "$SCHEME" \
@@ -118,7 +117,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath $(pwd)/build/DerivedData \
             -IDEBuildOperationMaxNumberOfConcurrentCompileTasks=1 \
-            -parallelizeTargets NO \
+            ParallelizeTargets=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
             SWIFT_COMPILATION_MODE=singlefile \
             ENABLE_BITCODE=NO \
