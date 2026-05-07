@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-14
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -103,8 +103,14 @@ jobs:
           echo "Found Workspace: $WORKSPACE"
           echo "Using Scheme: $SCHEME"
 
-          # 3. The "Slow & Steady" Build
-          # We are dropping to 1 concurrent task and disabling bitcode to save memory.
+          # 3. Separate Clean Step
+          xcodebuild clean \
+            -workspace ios/$WORKSPACE \
+            -scheme "$SCHEME" \
+            -configuration Release
+
+          # 4. The Linear Archive Step
+          # Adding -parallelizeTargets NO to force a single-file-at-a-time approach
           xcodebuild archive \
             -workspace ios/$WORKSPACE \
             -scheme "$SCHEME" \
@@ -114,6 +120,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath $(pwd)/build/DerivedData \
             -IDEBuildOperationMaxNumberOfConcurrentCompileTasks=1 \
+            -parallelizeTargets NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
             ENABLE_BITCODE=NO \
             CODE_SIGNING_ALLOWED=NO \
@@ -121,8 +128,8 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
             SKIP_BUNDLING=YES \
-            OTHER_LDFLAGS='$(inherited) -framework "Photos" -framework "OpenGLES" -framework "Accelerate"' \
-            clean archive
+            OTHER_LDFLAGS='$(inherited) -framework "Photos" -framework "OpenGLES" -framework "Accelerate"'
+            
       - name: Package IPA
         run: |
           mkdir -p build/Payload
