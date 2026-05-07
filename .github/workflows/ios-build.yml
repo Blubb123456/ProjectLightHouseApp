@@ -96,14 +96,15 @@ jobs:
           # 1. Force Node path
           echo "export NODE_BINARY=$(command -v node)" > ios/.xcode.env.local
 
-          # 2. Automatically find the workspace name
+          # 2. Find Workspace and Scheme
           WORKSPACE=$(find ios -name "*.xcworkspace" -maxdepth 1 | xargs basename)
           SCHEME=$(echo $WORKSPACE | cut -f 1 -d '.')
           
           echo "Found Workspace: $WORKSPACE"
           echo "Using Scheme: $SCHEME"
 
-          # 3. Build with the "Leash" settings to prevent Code 75
+          # 3. The "Slow & Steady" Build
+          # We are dropping to 1 concurrent task and disabling bitcode to save memory.
           xcodebuild archive \
             -workspace ios/$WORKSPACE \
             -scheme "$SCHEME" \
@@ -112,8 +113,9 @@ jobs:
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -derivedDataPath $(pwd)/build/DerivedData \
-            -IDEBuildOperationMaxNumberOfConcurrentCompileTasks=2 \
+            -IDEBuildOperationMaxNumberOfConcurrentCompileTasks=1 \
             COMPILER_INDEX_STORE_ENABLE=NO \
+            ENABLE_BITCODE=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
@@ -121,7 +123,6 @@ jobs:
             SKIP_BUNDLING=YES \
             OTHER_LDFLAGS='$(inherited) -framework "Photos" -framework "OpenGLES" -framework "Accelerate"' \
             clean archive
-
       - name: Package IPA
         run: |
           mkdir -p build/Payload
