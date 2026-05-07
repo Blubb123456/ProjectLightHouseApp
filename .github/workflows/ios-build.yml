@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -93,24 +93,22 @@ jobs:
 
       - name: Build Unsigned Archive
         run: |
-          # 1. Force Node path
+          # 1. Ensure we are using Xcode 16.1 or higher
+          sudo xcode-select -s /Applications/Xcode_16.1.app
+
+          # 2. Force Node path
           echo "export NODE_BINARY=$(command -v node)" > ios/.xcode.env.local
 
-          # 2. Find Workspace and Scheme
+          # 3. Find Workspace and Scheme
           WORKSPACE=$(find ios -name "*.xcworkspace" -maxdepth 1 | xargs basename)
           SCHEME=$(echo $WORKSPACE | cut -f 1 -d '.')
           
           echo "Found Workspace: $WORKSPACE"
           echo "Using Scheme: $SCHEME"
 
-          # 3. Separate Clean Step
-          xcodebuild clean \
-            -workspace ios/$WORKSPACE \
-            -scheme "$SCHEME" \
-            -configuration Release
-
-          # 4. The Linear Archive Step
-          # Adding -parallelizeTargets NO to force a single-file-at-a-time approach
+          # 4. The RAM-Shielded Build
+          # We are disabling parallelization and indexing, and forcing single-file Swift compilation
+          # to keep the memory footprint as small as possible.
           xcodebuild archive \
             -workspace ios/$WORKSPACE \
             -scheme "$SCHEME" \
@@ -122,13 +120,15 @@ jobs:
             -IDEBuildOperationMaxNumberOfConcurrentCompileTasks=1 \
             -parallelizeTargets NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
+            SWIFT_COMPILATION_MODE=singlefile \
             ENABLE_BITCODE=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
             SKIP_BUNDLING=YES \
-            OTHER_LDFLAGS='$(inherited) -framework "Photos" -framework "OpenGLES" -framework "Accelerate"'
+            OTHER_LDFLAGS='$(inherited) -framework "Photos" -framework "OpenGLES" -framework "Accelerate"' \
+            clean archive
             
       - name: Package IPA
         run: |
