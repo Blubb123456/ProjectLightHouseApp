@@ -91,24 +91,28 @@ jobs:
             --bundle-output ios/main.jsbundle \
             --assets-dest ios
 
-      - name: Build Unsigned Archive
+      name: Build Unsigned Archive
         run: |
-          # 1. Use the runner's default Xcode (likely 16.4) 
-          # which has all SDKs pre-installed.
-          
-          # 2. Force Node path
+          # 1. Setup Node Environment for React Native scripts
           echo "export NODE_BINARY=$(command -v node)" > ios/.xcode.env.local
 
-          # 3. Find Workspace and Scheme
+          # 2. Find Workspace and Scheme
           WORKSPACE=$(find ios -name "*.xcworkspace" -maxdepth 1 | xargs basename)
           SCHEME=$(echo $WORKSPACE | cut -f 1 -d '.')
           
           echo "Found Workspace: $WORKSPACE"
           echo "Using Scheme: $SCHEME"
 
-          # 4. The Simplified RAM-Shielded Build
-          # We removed the '-sdk iphoneos' flag to let Xcode auto-select 
-          # the best available iOS SDK for the 'generic' destination.
+          # 3. Clean separately to free up disk space and memory
+          xcodebuild clean \
+            -workspace ios/$WORKSPACE \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -derivedDataPath $(pwd)/build/DerivedData
+
+          # 4. The Ultra-Lean Archive Step
+          # Added GCC_GENERATE_DEBUGGING_SYMBOLS=NO to save massive amounts of RAM
+          # Added ARCHS=arm64 to match the runner's native architecture
           xcodebuild archive \
             -workspace ios/$WORKSPACE \
             -scheme "$SCHEME" \
@@ -118,16 +122,17 @@ jobs:
             -derivedDataPath $(pwd)/build/DerivedData \
             -IDEBuildOperationMaxNumberOfConcurrentCompileTasks=1 \
             ParallelizeTargets=NO \
+            ARCHS=arm64 \
             COMPILER_INDEX_STORE_ENABLE=NO \
             SWIFT_COMPILATION_MODE=singlefile \
+            GCC_GENERATE_DEBUGGING_SYMBOLS=NO \
+            COPY_PHASE_STRIP=YES \
             ENABLE_BITCODE=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
-            SKIP_BUNDLING=YES \
-            OTHER_LDFLAGS='$(inherited) -framework "Photos" -framework "OpenGLES" -framework "Accelerate"' \
-            clean archive
+            OTHER_LDFLAGS='$(inherited) -framework Photos -framework OpenGLES -framework Accelerate'
             
       - name: Package IPA
         run: |
