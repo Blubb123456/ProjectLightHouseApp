@@ -97,6 +97,11 @@ jobs:
           echo "export NODE_BINARY=$(command -v node)" > ios/.xcode.env.local
           
           xcodebuild archive \
+          # Force Node path to be visible to Xcode
+          echo "export NODE_BINARY=$(command -v node)" > ios/.xcode.env.local
+          
+          # We are adding COMPILER_INDEX_STORE_ENABLE=NO to save RAM
+          # and limiting concurrent compile tasks so the GitHub runner doesn't choke.
             -workspace ios/ProjectLightHouseReactApp.xcworkspace \
             -scheme ProjectLightHouseReactApp \
             -configuration Release \
@@ -104,6 +109,8 @@ jobs:
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -derivedDataPath $(pwd)/build/DerivedData \
+            -IDEBuildOperationMaxNumberOfConcurrentCompileTasks=2 \
+            COMPILER_INDEX_STORE_ENABLE=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
