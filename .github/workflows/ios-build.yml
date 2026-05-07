@@ -18,14 +18,14 @@ jobs:
       - name: Install Dependencies
         run: |
           npm install
-          npm install --save @tensorflow/tfjs @tensorflow/tfjs-react-native expo-gl
-          npm install --save-dev @expo/metro-config expo
-          npm install --save-dev @react-native/metro-config
+          # Force install the specific Project Lighthouse AI stack
+          npm install --save @tensorflow/tfjs @tensorflow/tfjs-react-native expo-gl expo-camera expo-image-picker
+          npm install --save-dev @expo/metro-config @react-native/metro-config
 
       - name: Generate iOS Folder
         run: npx expo prebuild --platform ios --clean --no-install
 
-      - name: Configure Podfile and Project
+      - name: Configure Podfile
         run: |
           cd ios
           cat <<'EOF' > Podfile
@@ -49,8 +49,7 @@ jobs:
             post_install do |installer|
               installer.pods_project.targets.each do |target|
                 target.build_configurations.each do |config|
-                  config.build_settings['CLANG_ENABLE_EXPLICIT_MODULES'] = 'NO'
-                  config.build_settings['CLANG_ENABLE_MODULE_DEBUGGING'] = 'NO'
+                  # CRITICAL: Disable Sandboxing for Xcode 16/macOS 15
                   config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
                   config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
                   config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
@@ -63,55 +62,27 @@ jobs:
           EOF
           pod install
 
-      - name: Force Fix Glog
+      - name: Patch TensorFlow Native Code
         run: |
-          GLOG_PATH="ios/Pods/glog"
-          sudo mkdir -p "$GLOG_PATH/src"
-          sudo chmod -R 777 "$GLOG_PATH"
-          sudo tee "$GLOG_PATH/src/config.h" > /dev/null <<EOF
-          #define GOOGLE_GLOG_DLL_DECL
-          #define HAVE_SYS_TYPES_H 1
-          #define HAVE_UNISTD_H 1
-          EOF
-          sudo touch "$GLOG_PATH/src/logging.cc" "$GLOG_PATH/src/raw_logging.cc" "$GLOG_PATH/src/utilities.cc"
-          
-      - name: Overwrite Hermes Source
-        run: |
-          python3 - <<'EOF'
-          import os
-          path = 'node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp'
-          if os.path.exists(path):
-              with open(path, 'r') as f:
-                  content = f.read()
-              if '#include <thread>' not in content:
-                  content = '#include <thread>\n#include <atomic>\n' + content
-              content = content.replace('std::thread::id expected', 'auto expected')
-              content = content.replace('std::make_shared<DecoratedRuntime>(runtime, debuggerName_)', 
-                                      'std::shared_ptr<DecoratedRuntime>(new DecoratedRuntime(runtime, debuggerName_))')
-              content = content.replace('return std::make_unique<HermesExecutor>(runtime,', 
-                                      'return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(runtime),')
-              with open(path, 'w') as f:
-                  f.write(content)
-          EOF
+          # TensorFlow often fails on 'std::make_unique' in older C++ standards
+          find node_modules/@tensorflow/tfjs-react-native -name "*.cpp" -exec sed -i '' 's/std::make_unique/std::unique_ptr/g' {} + || true
 
-      - name: Manual JS Bundle (Fixing the Black Box)
+      - name: Manual JS Bundle
         run: |
-          export NODE_BINARY=$(command -v node)
-          # We create the bundle manually so we can see JS errors here
+          ENTRY_FILE="index.js"
+          if [ ! -f "index.js" ]; then ENTRY_FILE="App.js"; fi
+          
+          # Create the bundle manually to bypass the broken Xcode script phase
           npx react-native bundle \
             --platform ios \
             --dev false \
-            --entry-file index.js \
+            --entry-file "$ENTRY_FILE" \
             --bundle-output ios/main.jsbundle \
             --assets-dest ios
-          
-          # Tell Xcode where the bundle is
-          mkdir -p build/ProjectLighthouse.xcarchive/Products/Applications/ProjectLightHouseReactApp.app
-          cp ios/main.jsbundle build/ProjectLighthouse.xcarchive/Products/Applications/ProjectLightHouseReactApp.app/main.jsbundle || true
 
       - name: Build Unsigned Archive
         run: |
-          # Force Node path for Xcode 16
+          # Force Node path to be visible to Xcode
           echo "export NODE_BINARY=$(command -v node)" > ios/.xcode.env.local
           
           xcodebuild archive \
@@ -127,12 +98,14 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
             SKIP_BUNDLING=YES \
+            OTHER_LDFLAGS='$(inherited) -framework "Photos" -framework "OpenGLES" -framework "Accelerate"' \
             clean archive
 
       - name: Package IPA
         run: |
           mkdir -p build/Payload
           APP_PATH=$(find build/ProjectLighthouse.xcarchive -name "*.app" | head -n 1)
+          if [ -z "$APP_PATH" ]; then exit 1; fi
           cp -R "$APP_PATH" build/Payload/
           cd build && zip -r ProjectLighthouse.ipa Payload
 
