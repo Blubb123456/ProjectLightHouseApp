@@ -18,8 +18,19 @@ jobs:
       - name: Install Dependencies
         run: |
           npm install
-          # Force install the specific Project Lighthouse AI stack
-          npm install --save @tensorflow/tfjs @tensorflow/tfjs-react-native expo-gl expo-camera expo-image-picker
+          # Explicitly add every module Project Lighthouse needs to run
+          npm install --save \
+            @tensorflow/tfjs \
+            @tensorflow/tfjs-react-native \
+            expo-gl \
+            expo-camera \
+            expo-image-picker \
+            expo-file-system \
+            expo-constants \
+            expo-asset \
+            expo-font
+          
+          # Metro config tools
           npm install --save-dev @expo/metro-config @react-native/metro-config
 
       - name: Generate iOS Folder
