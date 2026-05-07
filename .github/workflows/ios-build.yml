@@ -45,6 +45,7 @@ jobs:
 
           platform :ios, '15.1'
           install! 'cocoapods', :deterministic_uuids => false
+          use_frameworks! :linkage => :static
 
           target 'ProjectLightHouseReactApp' do
             use_expo_modules!
@@ -93,27 +94,25 @@ jobs:
 
       - name: Build Unsigned Archive
         run: |
-          # 1. Setup Node Environment for React Native scripts
+          # 1. Setup Environment
           echo "export NODE_BINARY=$(command -v node)" > ios/.xcode.env.local
+          
+          # 2. Manual JS Bundle (Isolates JS errors from Native errors)
+          # If Project Lighthouse has a JS error, it will fail here immediately.
+          npx react-native bundle \
+            --platform ios \
+            --dev false \
+            --entry-file index.js \
+            --bundle-output ios/main.jsbundle \
+            --assets-dest ios
 
-          # 2. Find Workspace and Scheme
+          # 3. Find Workspace and Scheme
           WORKSPACE=$(find ios -name "*.xcworkspace" -maxdepth 1 | xargs basename)
           SCHEME=$(echo $WORKSPACE | cut -f 1 -d '.')
-          
-          echo "Found Workspace: $WORKSPACE"
-          echo "Using Scheme: $SCHEME"
 
-          # 3. Clean separately to free up disk space and memory
-          xcodebuild clean \
-            -workspace ios/$WORKSPACE \
-            -scheme "$SCHEME" \
-            -configuration Release \
-            -derivedDataPath $(pwd)/build/DerivedData
-
-          # 4. The Ultra-Lean Archive Step
-          # Added GCC_GENERATE_DEBUGGING_SYMBOLS=NO to save massive amounts of RAM
-          # Added ARCHS=arm64 to match the runner's native architecture
-          xcodebuild archive \
+          # 4. The Archive Command
+          # We use '| tee xcodebuild.log' to save the output so we can scan it for the REAL error.
+          set -o pipefail && xcodebuild archive \
             -workspace ios/$WORKSPACE \
             -scheme "$SCHEME" \
             -configuration Release \
@@ -126,13 +125,12 @@ jobs:
             COMPILER_INDEX_STORE_ENABLE=NO \
             SWIFT_COMPILATION_MODE=singlefile \
             GCC_GENERATE_DEBUGGING_SYMBOLS=NO \
-            COPY_PHASE_STRIP=YES \
-            ENABLE_BITCODE=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
-            OTHER_LDFLAGS='$(inherited) -framework Photos -framework OpenGLES -framework Accelerate'
+            OTHER_LDFLAGS='$(inherited) -framework Photos -framework OpenGLES -framework Accelerate' \
+            clean archive | tee xcodebuild.log | grep -A 5 "error:" || (tail -n 50 xcodebuild.log && exit 65)
             
       - name: Package IPA
         run: |
