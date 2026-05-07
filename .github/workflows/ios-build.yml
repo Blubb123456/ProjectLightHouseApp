@@ -93,17 +93,20 @@ jobs:
 
       - name: Build Unsigned Archive
         run: |
-          # Force Node path to be visible to Xcode
+          # 1. Force Node path
           echo "export NODE_BINARY=$(command -v node)" > ios/.xcode.env.local
+
+          # 2. Automatically find the workspace name
+          WORKSPACE=$(find ios -name "*.xcworkspace" -maxdepth 1 | xargs basename)
+          SCHEME=$(echo $WORKSPACE | cut -f 1 -d '.')
           
+          echo "Found Workspace: $WORKSPACE"
+          echo "Using Scheme: $SCHEME"
+
+          # 3. Build with the "Leash" settings to prevent Code 75
           xcodebuild archive \
-          # Force Node path to be visible to Xcode
-          echo "export NODE_BINARY=$(command -v node)" > ios/.xcode.env.local
-          
-          # We are adding COMPILER_INDEX_STORE_ENABLE=NO to save RAM
-          # and limiting concurrent compile tasks so the GitHub runner doesn't choke.
-            -workspace ios/ProjectLightHouseReactApp.xcworkspace \
-            -scheme ProjectLightHouseReactApp \
+            -workspace ios/$WORKSPACE \
+            -scheme "$SCHEME" \
             -configuration Release \
             -archivePath $(pwd)/build/ProjectLighthouse.xcarchive \
             -sdk iphoneos \
