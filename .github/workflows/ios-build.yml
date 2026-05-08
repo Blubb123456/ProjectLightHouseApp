@@ -94,20 +94,16 @@ jobs:
 
       - name: Build Unsigned Archive
         run: |
-          # 1. Fix the Pathing for Hermes/React Native Scripts
-          # This tells the 'with-environment.sh' script exactly where the project is
+          # 1. Path Fixes
           export PROJECT_ROOT=$(pwd)
           export PODS_ROOT="$PROJECT_ROOT/ios/Pods"
-          
-          # 2. Re-create the environment helper just in case it's missing
           echo "export NODE_BINARY=$(command -v node)" > ios/.xcode.env.local
 
-          # 3. Find Workspace and Scheme
+          # 2. Find Workspace and Scheme
           WORKSPACE=$(find ios -name "*.xcworkspace" -maxdepth 1 | xargs basename)
           SCHEME=$(echo $WORKSPACE | cut -f 1 -d '.')
 
-          # 4. The "Script-Safe" Build
-          # We add 'EXTRA_PACKAGER_ARGS' and ensure the paths are linked
+          # 3. The Syntax-Corrected Low-Memory Build
           set -o pipefail
           xcodebuild archive \
             -workspace ios/$WORKSPACE \
@@ -117,11 +113,11 @@ jobs:
             -destination "generic/platform=iOS" \
             -derivedDataPath $(pwd)/build/DerivedData \
             -IDEBuildOperationMaxNumberOfConcurrentCompileTasks=1 \
-            -parallelizeTargets NO \
-            ParallelizeTargets=NO \
+            -parallelizeTargets=NO \
             ARCHS=arm64 \
-            DEBUG_INFORMATION_FORMAT=dwarf \
+            ParallelizeTargets=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
+            DEBUG_INFORMATION_FORMAT=dwarf \
             SWIFT_COMPILATION_MODE=singlefile \
             SWIFT_OPTIMIZATION_LEVEL=-Onone \
             GCC_GENERATE_DEBUGGING_SYMBOLS=NO \
