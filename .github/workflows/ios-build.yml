@@ -94,17 +94,21 @@ jobs:
 
       - name: Build Unsigned Archive
         run: |
-          # 1. Setup Environment
+          # 1. Fix the Pathing for Hermes/React Native Scripts
+          # This tells the 'with-environment.sh' script exactly where the project is
+          export PROJECT_ROOT=$(pwd)
+          export PODS_ROOT="$PROJECT_ROOT/ios/Pods"
+          
+          # 2. Re-create the environment helper just in case it's missing
           echo "export NODE_BINARY=$(command -v node)" > ios/.xcode.env.local
 
-          # 2. Find Workspace and Scheme
+          # 3. Find Workspace and Scheme
           WORKSPACE=$(find ios -name "*.xcworkspace" -maxdepth 1 | xargs basename)
           SCHEME=$(echo $WORKSPACE | cut -f 1 -d '.')
-          # 2. The Build Command (with pipefail to catch the error)
+
+          # 4. The "Script-Safe" Build
+          # We add 'EXTRA_PACKAGER_ARGS' and ensure the paths are linked
           set -o pipefail
-          # 3. The "Steady-Hand" Build
-          # -D_B_INDEX_SKIP_: Prevents background indexing which causes inconsistency errors.
-          # CLANG_ENABLE_MODULE_DEBUGGING=NO: Dramatically reduces the RAM used by 'glog'.
           xcodebuild archive \
             -workspace ios/$WORKSPACE \
             -scheme "$SCHEME" \
@@ -124,6 +128,7 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
             OTHER_CFLAGS="-D_B_INDEX_SKIP_" \
+            PODS_ROOT="$PODS_ROOT" \
             clean archive | tee xcodebuild.log
       
       # 3. THE LOG CATCHER (Runs even if the step above fails)
