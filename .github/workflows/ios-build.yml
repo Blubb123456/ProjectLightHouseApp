@@ -100,7 +100,8 @@ jobs:
           # 2. Find Workspace and Scheme
           WORKSPACE=$(find ios -name "*.xcworkspace" -maxdepth 1 | xargs basename)
           SCHEME=$(echo $WORKSPACE | cut -f 1 -d '.')
-
+          # 2. The Build Command (with pipefail to catch the error)
+          set -o pipefail
           # 3. The "Steady-Hand" Build
           # -D_B_INDEX_SKIP_: Prevents background indexing which causes inconsistency errors.
           # CLANG_ENABLE_MODULE_DEBUGGING=NO: Dramatically reduces the RAM used by 'glog'.
@@ -123,8 +124,16 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
             OTHER_CFLAGS="-D_B_INDEX_SKIP_" \
-            clean archive
-            
+            clean archive | tee xcodebuild.log
+      
+      # 3. THE LOG CATCHER (Runs even if the step above fails)
+      - name: Upload Xcode Build Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: project-lighthouse-build-log
+          path: xcodebuild.log
+          
       - name: Package IPA
         run: |
           mkdir -p build/Payload
