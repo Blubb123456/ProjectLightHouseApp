@@ -99,24 +99,30 @@ jobs:
             
       - name: Build Unsigned Archive
         run: |
-          # 1. Environment Setup
+          # 1. Environment & Pathing
           export NODE_BINARY=$(command -v node)
           echo "export NODE_BINARY=$NODE_BINARY" > ios/.xcode.env.local
           
-          # 2. Path Cleanup
+          # 2. Dynamic Discovery
+          # This finds the workspace file wherever it is hidden
+          WORKSPACE_PATH=$(find . -name "*.xcworkspace" -not -path "*/Pods/*" | head -n 1)
+          echo "Found Workspace: $WORKSPACE_PATH"
+          
+          # This extracts the scheme name from the workspace filename
+          # (e.g., ProjectLightHouseApp.xcworkspace -> ProjectLightHouseApp)
+          DETECTED_SCHEME=$(basename "$WORKSPACE_PATH" .xcworkspace)
+          echo "Detected Scheme: $DETECTED_SCHEME"
+
+          # 3. Cleanup
           rm -rf build
           mkdir -p build/ModuleCache
-          
-          # 3. Scheme Verification
-          # Change this if your scheme is named differently in Xcode
-          SCHEME="ProjectLightHouseReactApp" 
-          WORKSPACE="ProjectLightHouseApp.xcworkspace"
 
           # 4. The Archive Command
+          # We use the full path found by 'find' to avoid "does not exist" errors
           set -o pipefail
           xcodebuild archive \
-            -workspace ios/$WORKSPACE \
-            -scheme "$SCHEME" \
+            -workspace "$WORKSPACE_PATH" \
+            -scheme "$DETECTED_SCHEME" \
             -configuration Release \
             -archivePath $(pwd)/build/ProjectLighthouse.xcarchive \
             -destination "generic/platform=iOS" \
