@@ -117,10 +117,13 @@ jobs:
             -destination "generic/platform=iOS" \
             -derivedDataPath $(pwd)/build/DerivedData \
             -IDEBuildOperationMaxNumberOfConcurrentCompileTasks=1 \
+            -parallelizeTargets NO \
             ParallelizeTargets=NO \
             ARCHS=arm64 \
+            DEBUG_INFORMATION_FORMAT=dwarf \
             COMPILER_INDEX_STORE_ENABLE=NO \
             SWIFT_COMPILATION_MODE=singlefile \
+            SWIFT_OPTIMIZATION_LEVEL=-Onone \
             GCC_GENERATE_DEBUGGING_SYMBOLS=NO \
             CLANG_ENABLE_MODULE_DEBUGGING=NO \
             CODE_SIGNING_ALLOWED=NO \
