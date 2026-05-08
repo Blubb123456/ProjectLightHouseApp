@@ -92,15 +92,7 @@ jobs:
             --bundle-output ios/main.jsbundle \
             --assets-dest ios
             
-      - name: Fix Hermes Script Path (Symlink)
-        run: |
-          # The script is looking for /scripts/... at the root. 
-          # We create a symlink from the runner's root to your node_modules.
-          sudo mkdir -p /scripts/xcode
-          sudo ln -s $(pwd)/node_modules/react-native/scripts/xcode/with-environment.sh /scripts/xcode/with-environment.sh
-          
-          # Verify it exists for the logs
-          ls -la /scripts/xcode/with-environment.sh
+      
           
       - name: Build Unsigned Archive
         run: |
@@ -109,8 +101,7 @@ jobs:
           export NODE_BINARY=$(command -v node)
           echo "export NODE_BINARY=$NODE_BINARY" > ios/.xcode.env.local
 
-          # 2. Define the React Native Script Path
-          # This is the "magic" fix for the Hermes error
+          # 2. Define the React Native Script Path (The Magic Fix)
           export RN_PATH="$PROJECT_ROOT/node_modules/react-native"
 
           # 3. Find Workspace and Scheme
@@ -118,7 +109,6 @@ jobs:
           SCHEME=$(echo $WORKSPACE | cut -f 1 -d '.')
 
           # 4. The Build with Path Injection
-          # We pass REACT_NATIVE_PATH directly as a build setting
           set -o pipefail
           xcodebuild archive \
             -workspace ios/$WORKSPACE \
