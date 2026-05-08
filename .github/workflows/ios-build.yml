@@ -96,19 +96,20 @@ jobs:
           
       - name: Build Unsigned Archive
         run: |
-          # 1. Environment Setup
+          # 1. Environment & Pathing
           export PROJECT_ROOT=$(pwd)
           export NODE_BINARY=$(command -v node)
           echo "export NODE_BINARY=$NODE_BINARY" > ios/.xcode.env.local
           export RN_PATH="$PROJECT_ROOT/node_modules/react-native"
-
+          
+          # 2. Find Workspace and Scheme
           WORKSPACE=$(find ios -name "*.xcworkspace" -maxdepth 1 | xargs basename)
           SCHEME=$(echo $WORKSPACE | cut -f 1 -d '.')
 
-          # 2. The "Deep-Memory" Build
-          # Added COMPILER_INDEX_STORE_ENABLE=NO (Double check)
-          # Added GCC_OPTIMIZATION_LEVEL=0 (Stops the CPU from over-analyzing)
-          # Added STRIP_INSTALLED_PRODUCT=YES (Reduces memory during linking)
+          # 3. Aggressive Cache & Module Management
+          # We create a unique ModuleCache folder inside the runner to avoid permission/corruption issues
+          mkdir -p $(pwd)/build/ModuleCache
+
           set -o pipefail
           xcodebuild archive \
             -workspace ios/$WORKSPACE \
@@ -121,15 +122,12 @@ jobs:
             -parallelizeTargets=NO \
             ARCHS=arm64 \
             REACT_NATIVE_PATH="$RN_PATH" \
-            PODS_ROOT="$PROJECT_ROOT/ios/Pods" \
             COMPILER_INDEX_STORE_ENABLE=NO \
             DEBUG_INFORMATION_FORMAT=dwarf \
-            GCC_GENERATE_DEBUGGING_SYMBOLS=NO \
-            GCC_OPTIMIZATION_LEVEL=0 \
+            CLANG_MODULE_CACHE_PATH=$(pwd)/build/ModuleCache \
             SWIFT_COMPILATION_MODE=singlefile \
             SWIFT_OPTIMIZATION_LEVEL=-Onone \
-            CLANG_ENABLE_MODULE_DEBUGGING=NO \
-            STRIP_INSTALLED_PRODUCT=YES \
+            GCC_OPTIMIZATION_LEVEL=0 \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
