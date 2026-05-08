@@ -92,8 +92,6 @@ jobs:
             --bundle-output ios/main.jsbundle \
             --assets-dest ios
             
-      
-          
       - name: Build Unsigned Archive
         run: |
           # 1. Environment & Pathing
@@ -106,12 +104,12 @@ jobs:
           WORKSPACE=$(find ios -name "*.xcworkspace" -maxdepth 1 | xargs basename)
           SCHEME=$(echo $WORKSPACE | cut -f 1 -d '.')
 
-          # 3. Fresh Cache
-          mkdir -p $(pwd)/build/ModuleCache
+          # 3. Surgical Cleanup (Replacing 'clean' action)
+          rm -rf build
+          mkdir -p build/ModuleCache
+          mkdir -p build/DerivedData
 
-          # 4. The "Minimum Footprint" Build
-          # - Using 'build' instead of 'archive' initially can sometimes help 
-          # - but we'll stick to archive with even stricter flags.
+          # 4. The Archive Command (Notice 'clean' is removed)
           set -o pipefail
           xcodebuild archive \
             -workspace ios/$WORKSPACE \
@@ -126,20 +124,17 @@ jobs:
             REACT_NATIVE_PATH="$RN_PATH" \
             COMPILER_INDEX_STORE_ENABLE=NO \
             DEBUG_INFORMATION_FORMAT=dwarf \
-            GENERATION_DEBUG_SYMBOLS=NO \
-            CLANG_ENABLE_MODULE_DEBUGGING=NO \
             CLANG_MODULE_CACHE_PATH=$(pwd)/build/ModuleCache \
             SWIFT_COMPILATION_MODE=singlefile \
             SWIFT_OPTIMIZATION_LEVEL=-Onone \
             GCC_OPTIMIZATION_LEVEL=0 \
             STRIP_INSTALLED_PRODUCT=YES \
-            DEPLOYMENT_POSTPROCESSING=YES \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
-            OTHER_CFLAGS="-D_B_INDEX_SKIP_ -O0" \
-            clean archive | tee xcodebuild.log
+            OTHER_CFLAGS="-D_B_INDEX_SKIP_" \
+            archive | tee xcodebuild.log
       
       # 3. THE LOG CATCHER (Runs even if the step above fails)
       - name: Upload Xcode Build Log
