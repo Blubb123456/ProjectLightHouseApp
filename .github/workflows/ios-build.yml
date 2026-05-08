@@ -104,12 +104,21 @@ jobs:
           
       - name: Build Unsigned Archive
         run: |
-          # 1. Standard Environment Setup
-          echo "export NODE_BINARY=$(command -v node)" > ios/.xcode.env.local
+          # 1. Setup Environment
+          export PROJECT_ROOT=$(pwd)
+          export NODE_BINARY=$(command -v node)
+          echo "export NODE_BINARY=$NODE_BINARY" > ios/.xcode.env.local
+
+          # 2. Define the React Native Script Path
+          # This is the "magic" fix for the Hermes error
+          export RN_PATH="$PROJECT_ROOT/node_modules/react-native"
+
+          # 3. Find Workspace and Scheme
           WORKSPACE=$(find ios -name "*.xcworkspace" -maxdepth 1 | xargs basename)
           SCHEME=$(echo $WORKSPACE | cut -f 1 -d '.')
 
-          # 2. Build with existing memory protections
+          # 4. The Build with Path Injection
+          # We pass REACT_NATIVE_PATH directly as a build setting
           set -o pipefail
           xcodebuild archive \
             -workspace ios/$WORKSPACE \
@@ -121,6 +130,8 @@ jobs:
             -IDEBuildOperationMaxNumberOfConcurrentCompileTasks=1 \
             -parallelizeTargets=NO \
             ARCHS=arm64 \
+            REACT_NATIVE_PATH="$RN_PATH" \
+            PODS_ROOT="$PROJECT_ROOT/ios/Pods" \
             COMPILER_INDEX_STORE_ENABLE=NO \
             DEBUG_INFORMATION_FORMAT=dwarf \
             GCC_GENERATE_DEBUGGING_SYMBOLS=NO \
