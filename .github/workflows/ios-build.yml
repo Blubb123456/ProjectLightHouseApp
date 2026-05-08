@@ -99,33 +99,20 @@ jobs:
             
       - name: Build Unsigned Archive
         run: |
-          export PROJECT_ROOT=$(pwd)
+          # 1. Environment Setup
           export NODE_BINARY=$(command -v node)
           echo "export NODE_BINARY=$NODE_BINARY" > ios/.xcode.env.local
           
-          WORKSPACE=$(find ios -name "*.xcworkspace" -maxdepth 1 | xargs basename)
-          SCHEME=$(echo $WORKSPACE | cut -f 1 -d '.')
-
+          # 2. Path Cleanup
           rm -rf build
           mkdir -p build/ModuleCache
-          mkdir -p build/DerivedData
+          
+          # 3. Scheme Verification
+          # Change this if your scheme is named differently in Xcode
+          SCHEME="ProjectLightHouseReactApp" 
+          WORKSPACE="ProjectLightHouseApp.xcworkspace"
 
-          # Phase 1: Pre-Build (This handles the heavy C++ lifting)
-          # We don't archive yet; we just get the 'boost' and 'folly' hurdles out of the way.
-          xcodebuild build \
-            -workspace ios/$WORKSPACE \
-            -scheme "$SCHEME" \
-            -configuration Release \
-            -derivedDataPath $(pwd)/build/DerivedData \
-            -destination "generic/platform=iOS" \
-            -IDEBuildOperationMaxNumberOfConcurrentCompileTasks=1 \
-            ARCHS=arm64 \
-            COMPILER_INDEX_STORE_ENABLE=NO \
-            CLANG_MODULE_CACHE_PATH=$(pwd)/build/ModuleCache \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO
-
-          # Phase 2: Archive (This uses the already-built objects from Phase 1)
+          # 4. The Archive Command
           set -o pipefail
           xcodebuild archive \
             -workspace ios/$WORKSPACE \
@@ -135,8 +122,11 @@ jobs:
             -destination "generic/platform=iOS" \
             -derivedDataPath $(pwd)/build/DerivedData \
             -IDEBuildOperationMaxNumberOfConcurrentCompileTasks=1 \
+            -parallelizeTargets=NO \
             ARCHS=arm64 \
             COMPILER_INDEX_STORE_ENABLE=NO \
+            ENABLE_USER_SCRIPT_SANDBOXING=NO \
+            CLANG_MODULE_CACHE_PATH=$(pwd)/build/ModuleCache \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
