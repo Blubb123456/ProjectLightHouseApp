@@ -91,19 +91,25 @@ jobs:
             --entry-file "$ENTRY_FILE" \
             --bundle-output ios/main.jsbundle \
             --assets-dest ios
-
+            
+      - name: Fix Hermes Script Path (Symlink)
+        run: |
+          # The script is looking for /scripts/... at the root. 
+          # We create a symlink from the runner's root to your node_modules.
+          sudo mkdir -p /scripts/xcode
+          sudo ln -s $(pwd)/node_modules/react-native/scripts/xcode/with-environment.sh /scripts/xcode/with-environment.sh
+          
+          # Verify it exists for the logs
+          ls -la /scripts/xcode/with-environment.sh
+          
       - name: Build Unsigned Archive
         run: |
-          # 1. Path Fixes
-          export PROJECT_ROOT=$(pwd)
-          export PODS_ROOT="$PROJECT_ROOT/ios/Pods"
+          # 1. Standard Environment Setup
           echo "export NODE_BINARY=$(command -v node)" > ios/.xcode.env.local
-
-          # 2. Find Workspace and Scheme
           WORKSPACE=$(find ios -name "*.xcworkspace" -maxdepth 1 | xargs basename)
           SCHEME=$(echo $WORKSPACE | cut -f 1 -d '.')
 
-          # 3. The Syntax-Corrected Low-Memory Build
+          # 2. Build with existing memory protections
           set -o pipefail
           xcodebuild archive \
             -workspace ios/$WORKSPACE \
@@ -115,11 +121,8 @@ jobs:
             -IDEBuildOperationMaxNumberOfConcurrentCompileTasks=1 \
             -parallelizeTargets=NO \
             ARCHS=arm64 \
-            ParallelizeTargets=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
             DEBUG_INFORMATION_FORMAT=dwarf \
-            SWIFT_COMPILATION_MODE=singlefile \
-            SWIFT_OPTIMIZATION_LEVEL=-Onone \
             GCC_GENERATE_DEBUGGING_SYMBOLS=NO \
             CLANG_ENABLE_MODULE_DEBUGGING=NO \
             CODE_SIGNING_ALLOWED=NO \
@@ -127,7 +130,6 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
             OTHER_CFLAGS="-D_B_INDEX_SKIP_" \
-            PODS_ROOT="$PODS_ROOT" \
             clean archive | tee xcodebuild.log
       
       # 3. THE LOG CATCHER (Runs even if the step above fails)
