@@ -67,6 +67,11 @@ jobs:
                   config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
                   config.build_settings['CODE_SIGN_IDENTITY'] = ''
                   config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+                  config.build_settings['GCC_OPTIMIZATION_LEVEL'] = '0'
+                  config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
+                  config.build_settings['COMPILER_INDEX_STORE_ENABLE'] = 'NO'
+                  config.build_settings['GCC_GENERATE_DEBUGGING_SYMBOLS'] = 'NO'
+                  config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
                 end
               end
             end
@@ -94,22 +99,33 @@ jobs:
             
       - name: Build Unsigned Archive
         run: |
-          # 1. Environment & Pathing
           export PROJECT_ROOT=$(pwd)
           export NODE_BINARY=$(command -v node)
           echo "export NODE_BINARY=$NODE_BINARY" > ios/.xcode.env.local
-          export RN_PATH="$PROJECT_ROOT/node_modules/react-native"
           
-          # 2. Find Workspace and Scheme
           WORKSPACE=$(find ios -name "*.xcworkspace" -maxdepth 1 | xargs basename)
           SCHEME=$(echo $WORKSPACE | cut -f 1 -d '.')
 
-          # 3. Surgical Cleanup (Replacing 'clean' action)
           rm -rf build
           mkdir -p build/ModuleCache
           mkdir -p build/DerivedData
 
-          # 4. The Archive Command (Notice 'clean' is removed)
+          # Phase 1: Pre-Build (This handles the heavy C++ lifting)
+          # We don't archive yet; we just get the 'boost' and 'folly' hurdles out of the way.
+          xcodebuild build \
+            -workspace ios/$WORKSPACE \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -derivedDataPath $(pwd)/build/DerivedData \
+            -destination "generic/platform=iOS" \
+            -IDEBuildOperationMaxNumberOfConcurrentCompileTasks=1 \
+            ARCHS=arm64 \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            CLANG_MODULE_CACHE_PATH=$(pwd)/build/ModuleCache \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+
+          # Phase 2: Archive (This uses the already-built objects from Phase 1)
           set -o pipefail
           xcodebuild archive \
             -workspace ios/$WORKSPACE \
@@ -119,21 +135,11 @@ jobs:
             -destination "generic/platform=iOS" \
             -derivedDataPath $(pwd)/build/DerivedData \
             -IDEBuildOperationMaxNumberOfConcurrentCompileTasks=1 \
-            -parallelizeTargets=NO \
             ARCHS=arm64 \
-            REACT_NATIVE_PATH="$RN_PATH" \
             COMPILER_INDEX_STORE_ENABLE=NO \
-            DEBUG_INFORMATION_FORMAT=dwarf \
-            CLANG_MODULE_CACHE_PATH=$(pwd)/build/ModuleCache \
-            SWIFT_COMPILATION_MODE=singlefile \
-            SWIFT_OPTIMIZATION_LEVEL=-Onone \
-            GCC_OPTIMIZATION_LEVEL=0 \
-            STRIP_INSTALLED_PRODUCT=YES \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            ENABLE_USER_SCRIPT_SANDBOXING=NO \
-            OTHER_CFLAGS="-D_B_INDEX_SKIP_" \
             archive | tee xcodebuild.log
       
       # 3. THE LOG CATCHER (Runs even if the step above fails)
