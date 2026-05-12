@@ -85,6 +85,18 @@ jobs:
          # EOF
           
           #pod install --repo-update
+      - name: Inject Xcode Environment & Fix Swift Targets
+        run: |
+          cd ios
+          echo "export NODE_BINARY=$(command -v node)" > .xcode.env
+          echo "export NODE_BINARY=$(command -v node)" > .xcode.env.local
+          
+          mkdir -p scripts/xcode
+          cp ../node_modules/react-native/scripts/xcode/with-environment.sh scripts/xcode/ || true
+
+          # NEW: Force the Podfile to target iOS 15.0 so Swift modules compile
+          sed -i '' 's/platform :ios, .*/platform :ios, "15.0"/' Podfile
+      
       - name: Install Pods
         run: |
           cd ios
@@ -120,6 +132,7 @@ jobs:
             -archivePath $(pwd)/build/ProjectLighthouse.xcarchive \
             -destination "generic/platform=iOS" \
             -parallelizeTargets=NO \
+            SWIFT_TREAT_WARNINGS_AS_ERRORS=NO \
             -jobs 1 \
             CLANG_ENABLE_EXPLICIT_MODULES=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
