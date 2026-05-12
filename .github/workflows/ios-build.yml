@@ -66,20 +66,23 @@ jobs:
             config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
             config.build_settings['COMPILER_INDEX_STORE_ENABLE'] = 'NO'
             config.build_settings['GCC_GENERATE_DEBUGGING_SYMBOLS'] = 'NO'
+              end
             end
+
+          # 2. Update the main project targets (for modern CocoaPods versions)
+          if installer.respond_to?(:generated_projects)
+            installer.generated_projects.each do |project|
+            project.targets.each do |target|
+            target.build_configurations.each do |config|
+            config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+            config.build_settings['GCC_OPTIMIZATION_LEVEL'] = '0'
+            config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
+            config.build_settings['COMPILER_INDEX_STORE_ENABLE'] = 'NO'
+                  end
+                end
+              end
             end
-            if installer.respond_to?(:generated_projects)
-              installer.generated_projects.each do |project|
-              project.targets.each do |target|
-              target.build_configurations.each do |config|
-              config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-              config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
-              config.build_settings['GCC_OPTIMIZATION_LEVEL'] = '0'
-            end
-            end
-            end
-            end
-            end
+          end
           EOF
           pod install
 
