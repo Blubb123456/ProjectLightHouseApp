@@ -106,6 +106,15 @@ jobs:
           sudo cp ../node_modules/react-native/scripts/xcode/with-environment.sh /scripts/xcode/
           sudo chmod +x /scripts/xcode/with-environment.sh
           cd ..
+          cd ios
+          # Point the NODE_BINARY to the actual runner path
+          echo "export NODE_BINARY=$(command -v node)" > .xcode.env
+          echo "export NODE_BINARY=$(command -v node)" > .xcode.env.local
+          
+          # Fix the symlink for the script Hermes is looking for
+          mkdir -p scripts/xcode
+          cp ../node_modules/react-native/scripts/xcode/with-environment.sh scripts/xcode/
+          cd ..
           # 3. The Clean Build Command
           set -o pipefail
           xcodebuild archive \
@@ -127,6 +136,8 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
+            PROJECT_DIR=$(pwd)/ios \
+            PODS_ROOT=$(pwd)/ios/Pods \
             AD_HOC_CODE_SIGNING_ALLOWED=YES \
             archive | tee xcodebuild.log
 
