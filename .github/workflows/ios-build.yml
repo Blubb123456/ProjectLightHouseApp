@@ -105,11 +105,13 @@ jobs:
           
       - name: Build Unsigned Archive
         run: |
-          # Discovery
+          # 1. Discovery (same as before)
           WORKSPACE_PATH=$(find ios -name "*.xcworkspace" -maxdepth 2 | head -n 1)
           SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
 
-          # Execute serial build to avoid "Target ID" inconsistency errors
+          # 2. The "Stability" Build
+          # CLANG_ENABLE_EXPLICIT_MODULES=NO fixes the 'PrecompileModule' scan crashes
+          # COMPILER_INDEX_STORE_ENABLE=NO speeds up the runner and prevents I/O timeouts
           set -o pipefail
           xcodebuild archive \
             -workspace "$WORKSPACE_PATH" \
@@ -119,6 +121,8 @@ jobs:
             -destination "generic/platform=iOS" \
             -parallelizeTargets=NO \
             -jobs 1 \
+            CLANG_ENABLE_EXPLICIT_MODULES=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
