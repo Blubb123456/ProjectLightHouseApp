@@ -94,8 +94,21 @@ jobs:
           mkdir -p scripts/xcode
           cp ../node_modules/react-native/scripts/xcode/with-environment.sh scripts/xcode/ || true
 
-          # NEW: Force the Podfile to target iOS 15.0 so Swift modules compile
-          sed -i '' 's/platform :ios, .*/platform :ios, "15.0"/' Podfile
+          # 1. Bump the main project target to 16.0
+          sed -i '' 's/platform :ios, .*/platform :ios, "15.1"/' Podfile
+
+          # 2. THE NUCLEAR HOOK: Force every pod to 16.0 to fix ReactAppDependencyProvider
+          # This appends a post_install hook to the end of the Podfile
+          cat <<EOF >> Podfile
+
+          post_install do |installer|
+          installer.pods_project.targets.each do |target|
+          target.build_configurations.each do |config|
+          config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+              end
+            end
+          end
+          EOF
       
       - name: Install Pods
         run: |
@@ -137,6 +150,7 @@ jobs:
             -parallelizeTargets=NO \
             SWIFT_TREAT_WARNINGS_AS_ERRORS=NO \
             -jobs 1 \
+            IPHONEOS_DEPLOYMENT_TARGET=15.1 \
             CLANG_ENABLE_EXPLICIT_MODULES=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
             CODE_SIGNING_ALLOWED=NO \
