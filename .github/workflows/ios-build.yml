@@ -102,7 +102,10 @@ jobs:
           echo "export PATH=$PATH" >> .xcode.env
           cd ..
           echo "Building Scheme: $SCHEME_NAME"
-
+          sudo mkdir -p /scripts/xcode
+          sudo cp ../node_modules/react-native/scripts/xcode/with-environment.sh /scripts/xcode/
+          sudo chmod +x /scripts/xcode/with-environment.sh
+          cd ..
           # 3. The Clean Build Command
           set -o pipefail
           xcodebuild archive \
@@ -124,26 +127,31 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
             archive | tee xcodebuild.log
 
       - name: Package IPA
-        if: always() # Run even if the build failed to catch partial apps
         run: |
           mkdir -p build/Payload
           
-          # Find the .app folder anywhere in build or tmp
-          APP_PATH=$(find /tmp/DerivedData $(pwd)/build -name "*.app" -type d | grep "Release-iphoneos" | head -n 1)
-          
+          # 1. Try to find the app inside the Archive first
+          APP_PATH=$(find build/ProjectLighthouse.xcarchive -name "*.app" -type d | head -n 1)
+
+          # 2. Fallback: Search DerivedData if Archive failed
           if [ -z "$APP_PATH" ]; then
-            echo "❌ STILL NO APP FOUND. Checking end of log:"
-            tail -n 100 xcodebuild.log
+            echo "⚠️ Archive not found, searching DerivedData..."
+            APP_PATH=$(find /tmp/DerivedData -name "ProjectLightHouseReactApp.app" -type d | grep "Release-iphoneos" | head -n 1)
+          fi
+
+          if [ -z "$APP_PATH" ]; then
+            echo "❌ ERROR: No .app file found in Archive or DerivedData."
             exit 1
           fi
 
           echo "✅ Found App at: $APP_PATH"
           cp -R "$APP_PATH/" build/Payload/
           cd build && zip -yr ProjectLighthouse.ipa Payload
-
+          
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
