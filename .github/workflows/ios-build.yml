@@ -116,6 +116,26 @@ jobs:
           rm -rf build/DerivedData
           # Wipe the CocoaPods header storage to force a clean re-link
           rm -rf ios/Pods/Headers
+      
+      - name: Maximize Runner Space & Pre-setup Hermes
+        run: |
+          # 1. Remove unnecessary Android/Dotnet/Haskell bloat to free ~20GB
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          
+          # 2. Manually trigger the Hermes script so Xcode doesn't have to
+          # This prevents the 'Internal Inconsistency' crash
+          cd ios/Pods/hermes-engine
+          if [ -f "dest/hermes.framework/hermes" ]; then
+            echo "Hermes already unzipped."
+          else
+            echo "Manually unzipping Hermes..."
+            # This is essentially what that failing script does
+            unzip -o hermes-runtime-darwin.zip -d dest/ || true
+          fi
+          cd ../../..
           
       - name: Build Unsigned Archive
         run: |
@@ -148,6 +168,8 @@ jobs:
             -IDEBuildOperationMaxNumberOfConcurrentCompileTasks=1 \
             -parallelizeTargets=NO \
             USE_HEADERMAP=NO \
+            DISABLE_MANUAL_TARGET_ORDER_PROCESSING=YES \
+            CLANG_ENABLE_MODULE_DEBUGGING=NO \
             -resultBundlePath $(pwd)/build/ResultBundle.xcresult \
             ARCHS=arm64 \
             SWIFT_COMPILATION_MODE=singlefile \
