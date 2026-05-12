@@ -90,23 +90,26 @@ jobs:
           
       - name: Build Unsigned Archive
         run: |
-          # 1. FIX THE ENVIRONMENT PATHS
+          # 1. SETUP ENVIRONMENT FILES
+          # React Native scripts specifically look for these files to find Node and relative paths
           cd ios
-          # Create the environment files Xcode scripts look for
           echo "export NODE_BINARY=$(command -v node)" > .xcode.env
           echo "export NODE_BINARY=$(command -v node)" > .xcode.env.local
           
-          # Manually create the directory structure inside the project
+          # 2. PRE-EMPTIVELY FIX HERMES
+          # The error log shows PhaseScriptExecution for Hermes failed. 
+          # We ensure the script it needs is definitely accessible.
           mkdir -p scripts/xcode
           cp ../node_modules/react-native/scripts/xcode/with-environment.sh scripts/xcode/
           cd ..
 
-          # 2. DISCOVER WORKSPACE AND SCHEME
+          # 3. DISCOVER WORKSPACE AND SCHEME
           WORKSPACE_PATH=$(find ios -name "*.xcworkspace" -maxdepth 2 | head -n 1)
           SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
 
-          # 3. RUN THE BUILD WITH PATH OVERRIDES
-          # We force the script search paths to stay within the project directory
+          # 4. EXECUTE SERIALIZED BUILD
+          # -parallelizeTargets=NO is the FIX for the 'Internal inconsistency' error.
+          # -jobs 1 prevents the runner from over-committing CPU, which crashes the Hermes script.
           set -o pipefail
           xcodebuild archive \
             -workspace "$WORKSPACE_PATH" \
@@ -120,9 +123,8 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            PROJECT_DIR=$(pwd)/ios \
-            SRCROOT=$(pwd)/ios \
-            PODS_ROOT=$(pwd)/ios/Pods \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            COMPILER_INDEX_STORE_ENABLE=NO \
             | tee xcodebuild.log
 
       - name: Package IPA
