@@ -75,6 +75,16 @@ jobs:
                 end
               end
             end
+            # This part targets the individual Pod targets
+            installer.pods_project.targets.each do |target|
+            target.build_configurations.each do |config|
+            config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+            config.build_settings['GCC_OPTIMIZATION_LEVEL'] = '0'
+            config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
+            config.build_settings['COMPILER_INDEX_STORE_ENABLE'] = 'NO'
+            end
+          end
+          end
           end
           EOF
           pod install
@@ -103,22 +113,20 @@ jobs:
           export NODE_BINARY=$(command -v node)
           echo "export NODE_BINARY=$NODE_BINARY" > ios/.xcode.env.local
           
-          # 2. Dynamic Discovery
-          # This finds the workspace file wherever it is hidden
-          WORKSPACE_PATH=$(find . -name "*.xcworkspace" -not -path "*/Pods/*" | head -n 1)
-          echo "Found Workspace: $WORKSPACE_PATH"
-          
-          # This extracts the scheme name from the workspace filename
-          # (e.g., ProjectLightHouseApp.xcworkspace -> ProjectLightHouseApp)
-          DETECTED_SCHEME=$(basename "$WORKSPACE_PATH" .xcworkspace)
-          echo "Detected Scheme: $DETECTED_SCHEME"
+          # 2. Manual JS Bundle (Reduces xcodebuild load)
+          npx expo export:embed \
+            --platform ios \
+            --dev false \
+            --entry-file index.js \
+            --bundle-output ios/main.jsbundle \
+            --assets-dest ios
 
-          # 3. Cleanup
-          rm -rf build
-          mkdir -p build/ModuleCache
+          # 3. Dynamic Discovery
+          WORKSPACE_PATH=$(find . -name "*.xcworkspace" -not -path "*/Pods/*" | head -n 1)
+          DETECTED_SCHEME=$(basename "$WORKSPACE_PATH" .xcworkspace)
 
           # 4. The Archive Command
-          # We use the full path found by 'find' to avoid "does not exist" errors
+          # Added 'ENABLE_PREVIEWS=NO' to resolve the Swift Optimization note
           set -o pipefail
           xcodebuild archive \
             -workspace "$WORKSPACE_PATH" \
@@ -132,7 +140,9 @@ jobs:
             ARCHS=arm64 \
             COMPILER_INDEX_STORE_ENABLE=NO \
             ENABLE_USER_SCRIPT_SANDBOXING=NO \
-            CLANG_MODULE_CACHE_PATH=$(pwd)/build/ModuleCache \
+            ENABLE_PREVIEWS=NO \
+            SWIFT_OPTIMIZATION_LEVEL="-Onone" \
+            GCC_OPTIMIZATION_LEVEL="0" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
