@@ -106,8 +106,21 @@ jobs:
 
       - name: Package IPA
         run: |
+          # 1. Ensure we are in the right spot
           mkdir -p build/Payload
-          APP_PATH=$(find build/ProjectLighthouse.xcarchive -name "*.app" | head -n 1)
+          
+          # 2. Find the .app folder inside the archive
+          # We use a broader search in case the archive name is slightly different
+          APP_PATH=$(find /tmp/DerivedData -name "*.app" -type d | grep "Release-iphoneos" | head -n 1)
+          
+          if [ -z "$APP_PATH" ]; then
+            echo "❌ ERROR: No .app file found. The build likely failed."
+            exit 1
+          fi
+          
+          echo "Found App at: $APP_PATH"
+          
+          # 3. Copy to Payload and Zip
           cp -R "$APP_PATH" build/Payload/
           cd build && zip -r ProjectLighthouse.ipa Payload
 
