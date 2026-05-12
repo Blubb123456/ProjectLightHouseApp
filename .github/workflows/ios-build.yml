@@ -100,7 +100,8 @@ jobs:
       - name: Install Pods
         run: |
           cd ios
-          pod install
+          # This flag is the key to finding missing Expo specs
+          pod install --repo-update
       - name: Manual JS Bundle
         run: |
           npx expo export:embed --platform ios --dev false --bundle-output ios/main.jsbundle --assets-dest ios
