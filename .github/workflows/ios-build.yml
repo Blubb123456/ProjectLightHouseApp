@@ -23,6 +23,7 @@ jobs:
 
       - name: Generate iOS Folder & Configure Podfile
         run: |
+          setup_react_native_env!
           npx expo prebuild --platform ios --clean --no-install
           cd ios
           # We overwrite the Podfile with the correct syntax and the "Surgical Fixes"
@@ -90,26 +91,23 @@ jobs:
           
       - name: Build Unsigned Archive
         run: |
-          # 1. SETUP ENVIRONMENT FILES
-          # React Native scripts specifically look for these files to find Node and relative paths
+          # 1. SETUP LOCAL ENVIRONMENT
+          # This creates the file React Native scripts use to find Node.js
           cd ios
           echo "export NODE_BINARY=$(command -v node)" > .xcode.env
           echo "export NODE_BINARY=$(command -v node)" > .xcode.env.local
           
-          # 2. PRE-EMPTIVELY FIX HERMES
-          # The error log shows PhaseScriptExecution for Hermes failed. 
-          # We ensure the script it needs is definitely accessible.
+          # Fix for Hermes script pathing issues in CI
           mkdir -p scripts/xcode
-          cp ../node_modules/react-native/scripts/xcode/with-environment.sh scripts/xcode/
+          cp ../node_modules/react-native/scripts/xcode/with-environment.sh scripts/xcode/ || true
           cd ..
 
-          # 3. DISCOVER WORKSPACE AND SCHEME
+          # 2. DISCOVER WORKSPACE AND SCHEME
           WORKSPACE_PATH=$(find ios -name "*.xcworkspace" -maxdepth 2 | head -n 1)
           SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
 
-          # 4. EXECUTE SERIALIZED BUILD
-          # -parallelizeTargets=NO is the FIX for the 'Internal inconsistency' error.
-          # -jobs 1 prevents the runner from over-committing CPU, which crashes the Hermes script.
+          # 3. EXECUTE BUILD
+          # -parallelizeTargets=NO and -jobs 1 are CRITICAL for stability on GitHub Runners
           set -o pipefail
           xcodebuild archive \
             -workspace "$WORKSPACE_PATH" \
