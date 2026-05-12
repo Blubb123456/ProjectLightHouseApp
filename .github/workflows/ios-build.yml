@@ -77,7 +77,17 @@ jobs:
       - name: Manual JS Bundle
         run: |
           npx expo export:embed --platform ios --dev false --bundle-output ios/main.jsbundle --assets-dest ios
-
+      
+      - name: Setup Xcode Environment
+        run: |
+          cd ios
+          # This tells Xcode exactly where the Node binary and the environment scripts are
+          echo "export NODE_BINARY=$(command -v node)" > .xcode.env
+          echo "export PATH=$PATH" >> .xcode.env
+          # Link the helper script if it's missing from the expected path
+          mkdir -p scripts/xcode
+          cp ../node_modules/react-native/scripts/xcode/with-environment.sh scripts/xcode/ || true
+          
       - name: Build Unsigned Archive
         run: |
           # 1. Setup environment
@@ -100,6 +110,7 @@ jobs:
             -destination "generic/platform=iOS" \
             -derivedDataPath /tmp/DerivedData \
             -jobs 1 \
+            SKIP_BUNDLING=1 \
             -parallelizeTargets=NO \
             -IDEBuildOperationMaxNumberOfConcurrentCompileTasks=1 \
             COMPILER_INDEX_STORE_ENABLE=NO \
