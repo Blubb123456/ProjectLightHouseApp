@@ -36,8 +36,16 @@ jobs:
       - name: Generate iOS Folder
         run: npx expo prebuild --platform ios --clean --no-install
 
+      - name: Fresh Pod Install
+        run: |
+          cd ios
+          rm -rf Pods
+          rm -rf Podfile.lock
+          pod install
+          
       - name: Configure Podfile
         run: |
+          pod 'fmt', :modular_headers => true
           cd ios
           cat <<'EOF' > Podfile
           require_relative '../node_modules/expo/scripts/autolinking'
@@ -78,6 +86,12 @@ jobs:
                   config.build_settings['ALWAYS_SEARCH_USER_PATHS'] = 'NO'
                   config.build_settings['STRIP_INSTALLED_PRODUCT'] = 'NO'
                   config.build_settings['COPY_PHASE_STRIP'] = 'NO'
+                  # --- ADD THIS SPECIFIC BLOCK ---
+                  if target.name == 'fmt'
+                    target.build_configurations.each do |config|
+                    config.build_settings['HEADER_SEARCH_PATHS'] = '$(inherited) "${PODS_ROOT}/fmt/include"'
+                end
+              end
                   if target.name == 'hermes-engine'
                     target.build_phases.delete_if do |phase|
                     phase.respond_to?(:name) && phase.name.include?('Replace Hermes')
