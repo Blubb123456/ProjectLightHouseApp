@@ -76,6 +76,11 @@ jobs:
                   config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf'
                   config.build_settings['USE_HEADERMAP'] = 'NO'
                   config.build_settings['ALWAYS_SEARCH_USER_PATHS'] = 'NO'
+                  if target.name == 'hermes-engine'
+                    target.build_phases.delete_if do |phase|
+                    phase.respond_to?(:name) && phase.name.include?('Replace Hermes')
+                      end
+                    end
                 end
               end
             end
@@ -109,13 +114,24 @@ jobs:
           # This kills the background build coordinator that often hangs
           sudo killall -9 XcodeDefault || true     
       
-      - name: Clean Header Maps
+      - name: Aggressive Cleanup & Manual Hermes Setup
         run: |
-          # Clear the specific derived data folders that hold header symlinks
-          rm -rf ~/Library/Developer/Xcode/DerivedData
-          rm -rf build/DerivedData
-          # Wipe the CocoaPods header storage to force a clean re-link
-          rm -rf ios/Pods/Headers
+          # 1. Clear ~20GB of runner bloat
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/lib/android
+          
+          # 2. Manual Hermes Preparation
+          # We unzip it here so Xcode's 'hermes-engine' target finds it ready
+          echo "Preparing Hermes framework manually..."
+          cd ios/Pods/hermes-engine
+          unzip -o hermes-runtime-darwin.zip -d dest/ || true
+          
+          # 3. Check Disk Space (for your logs)
+          echo "Current Disk Usage:"
+          df -h
+          cd ../../..
       
       - name: Maximize Runner Space & Pre-setup Hermes
         run: |
@@ -164,7 +180,7 @@ jobs:
             -configuration Release \
             -archivePath $(pwd)/build/ProjectLighthouse.xcarchive \
             -destination "generic/platform=iOS" \
-            -derivedDataPath $(pwd)/build/DerivedData \
+            -derivedDataPath /tmp/DerivedData \
             -IDEBuildOperationMaxNumberOfConcurrentCompileTasks=1 \
             -parallelizeTargets=NO \
             USE_HEADERMAP=NO \
