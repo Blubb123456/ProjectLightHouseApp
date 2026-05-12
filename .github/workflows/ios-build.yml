@@ -31,7 +31,7 @@ jobs:
           require_relative '../node_modules/react-native/scripts/react_native_pods'
 
           platform :ios, '15.1'
-          install! 'cocoapods', :deterministic_uuids => false
+          install! 'cocoapods', :deterministic_uuids => true
           use_frameworks! :linkage => :static
 
           target 'ProjectLightHouseReactApp' do
