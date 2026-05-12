@@ -97,7 +97,10 @@ jobs:
           # We force the scheme to match what Expo actually generated
           WORKSPACE_PATH=$(find ios -name "*.xcworkspace" -maxdepth 2 | head -n 1)
           SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
-          
+          cd ios
+          echo "export NODE_BINARY=$(command -v node)" > .xcode.env
+          echo "export PATH=$PATH" >> .xcode.env
+          cd ..
           echo "Building Scheme: $SCHEME_NAME"
 
           # 3. The Clean Build Command
@@ -114,6 +117,7 @@ jobs:
             -parallelizeTargets=NO \
             -IDEBuildOperationMaxNumberOfConcurrentCompileTasks=1 \
             COMPILER_INDEX_STORE_ENABLE=NO \
+            SWIFT_COMPILATION_MODE=singlefile \
             USE_HEADERMAP=NO \
             OTHER_CFLAGS='$(inherited) -Wno-error=non-modular-include-in-framework-module' \
             OTHER_CPLUSPLUSFLAGS='$(inherited) -Wno-error=non-modular-include-in-framework-module' \
@@ -123,21 +127,16 @@ jobs:
             archive | tee xcodebuild.log
 
       - name: Package IPA
-        if: success() || failure() # Run even if previous step had warnings
+        if: always() # Run even if the build failed to catch partial apps
         run: |
           mkdir -p build/Payload
           
-          # Look in the Archive first, then Fallback to DerivedData
-          APP_PATH=$(find build/ProjectLighthouse.xcarchive -name "*.app" -type d | head -n 1)
+          # Find the .app folder anywhere in build or tmp
+          APP_PATH=$(find /tmp/DerivedData $(pwd)/build -name "*.app" -type d | grep "Release-iphoneos" | head -n 1)
           
           if [ -z "$APP_PATH" ]; then
-            echo "Archive empty, searching DerivedData..."
-            APP_PATH=$(find /tmp/DerivedData -name "*.app" -type d | grep "Release-iphoneos" | head -n 1)
-          fi
-
-          if [ -z "$APP_PATH" ]; then
-            echo "❌ ERROR: No .app file found. Build logs follow:"
-            tail -n 50 xcodebuild.log
+            echo "❌ STILL NO APP FOUND. Checking end of log:"
+            tail -n 100 xcodebuild.log
             exit 1
           fi
 
