@@ -90,32 +90,23 @@ jobs:
           
       - name: Build Unsigned Archive
         run: |
-          # 1. Setup environment
-          export NODE_BINARY=$(command -v node)
-          
-          # 2. Fix the Scheme/Target mismatch
-          # We force the scheme to match what Expo actually generated
-          WORKSPACE_PATH=$(find ios -name "*.xcworkspace" -maxdepth 2 | head -n 1)
-          SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
+          # 1. FIX THE ENVIRONMENT PATHS
           cd ios
-          echo "export NODE_BINARY=$(command -v node)" > .xcode.env
-          echo "export PATH=$PATH" >> .xcode.env
-          cd ..
-          echo "Building Scheme: $SCHEME_NAME"
-          sudo mkdir -p /scripts/xcode
-          sudo cp ../node_modules/react-native/scripts/xcode/with-environment.sh /scripts/xcode/
-          sudo chmod +x /scripts/xcode/with-environment.sh
-          cd ..
-          cd ios
-          # Point the NODE_BINARY to the actual runner path
+          # Create the environment files Xcode scripts look for
           echo "export NODE_BINARY=$(command -v node)" > .xcode.env
           echo "export NODE_BINARY=$(command -v node)" > .xcode.env.local
           
-          # Fix the symlink for the script Hermes is looking for
+          # Manually create the directory structure inside the project
           mkdir -p scripts/xcode
           cp ../node_modules/react-native/scripts/xcode/with-environment.sh scripts/xcode/
           cd ..
-          # 3. The Clean Build Command
+
+          # 2. DISCOVER WORKSPACE AND SCHEME
+          WORKSPACE_PATH=$(find ios -name "*.xcworkspace" -maxdepth 2 | head -n 1)
+          SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
+
+          # 3. RUN THE BUILD WITH PATH OVERRIDES
+          # We force the script search paths to stay within the project directory
           set -o pipefail
           xcodebuild archive \
             -workspace "$WORKSPACE_PATH" \
@@ -123,23 +114,16 @@ jobs:
             -configuration Release \
             -archivePath $(pwd)/build/ProjectLighthouse.xcarchive \
             -destination "generic/platform=iOS" \
-            -derivedDataPath /tmp/DerivedData \
-            -jobs 1 \
-            SKIP_BUNDLING=1 \
             -parallelizeTargets=NO \
+            -jobs 1 \
             -IDEBuildOperationMaxNumberOfConcurrentCompileTasks=1 \
-            COMPILER_INDEX_STORE_ENABLE=NO \
-            SWIFT_COMPILATION_MODE=singlefile \
-            USE_HEADERMAP=NO \
-            OTHER_CFLAGS='$(inherited) -Wno-error=non-modular-include-in-framework-module' \
-            OTHER_CPLUSPLUSFLAGS='$(inherited) -Wno-error=non-modular-include-in-framework-module' \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             PROJECT_DIR=$(pwd)/ios \
+            SRCROOT=$(pwd)/ios \
             PODS_ROOT=$(pwd)/ios/Pods \
-            AD_HOC_CODE_SIGNING_ALLOWED=YES \
-            archive | tee xcodebuild.log
+            | tee xcodebuild.log
 
       - name: Package IPA
         run: |
