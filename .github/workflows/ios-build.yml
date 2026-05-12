@@ -102,7 +102,6 @@ jobs:
             -jobs 1 \
             -parallelizeTargets=NO \
             -IDEBuildOperationMaxNumberOfConcurrentCompileTasks=1 \
-            -disable-custom-llvm-modules \
             COMPILER_INDEX_STORE_ENABLE=NO \
             USE_HEADERMAP=NO \
             OTHER_CFLAGS='$(inherited) -Wno-error=non-modular-include-in-framework-module' \
