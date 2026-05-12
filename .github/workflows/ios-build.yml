@@ -94,6 +94,8 @@ jobs:
                     config.build_settings['DEFINES_MODULE'] = 'YES'
                     config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
                     config.build_settings['HEADER_SEARCH_PATHS'] = '$(inherited) "${PODS_ROOT}/fmt/include"'
+                    config.build_settings['HEADER_SEARCH_PATHS'] << '"$(PODS_ROOT)/Headers/Public/fmt" '
+                    config.build_settings['HEADER_SEARCH_PATHS'] << '"$(PODS_ROOT)/fmt/include" '
                 end
             end
                   # --- ADD THIS SPECIFIC BLOCK ---
@@ -217,6 +219,7 @@ jobs:
             -IDEBuildOperationMaxNumberOfConcurrentCompileTasks=1 \
             -parallelizeTargets=NO \
             USE_HEADERMAP=NO \
+            OTHER_CFLAGS='$(inherited) -Wno-error=non-modular-include-in-framework-module' \
             DISABLE_MANUAL_TARGET_ORDER_PROCESSING=YES \
             CLANG_ENABLE_MODULE_DEBUGGING=NO \
             -resultBundlePath $(pwd)/build/ResultBundle.xcresult \
