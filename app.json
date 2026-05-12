@@ -7,7 +7,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": false, 
+    "newArchEnabled": false,
     "packagerOpts": {
       "config": "metro.config.js",
       "sourceExts": ["js", "jsx", "json", "ts", "tsx", "bin"]
@@ -17,7 +17,8 @@
       "bundleIdentifier": "com.jmb10.ProjectLightHouseReactApp",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSCameraUsageDescription": "This app needs camera access to classify images for Project Lighthouse."
+        "NSCameraUsageDescription": "This app needs camera access to classify images for Project Lighthouse.",
+        "NSMicrophoneUsageDescription": "This app requires microphone access for video processing."
       }
     },
     "android": {
@@ -27,15 +28,6 @@
       },
       "package": "com.jmb10.ProjectLightHouseReactApp"
     },
-  "expo": {
-    "ios": {
-      "infoPlist": {
-        "NSCameraUsageDescription": "This app requires camera access to classify images.",
-        "NSMicrophoneUsageDescription": "This app requires microphone access for video processing."
-      }
-    }
-  }
-},
     "extra": {
       "eas": {
         "projectId": "8e70bcba-5878-4373-8088-14cf29429b38"
