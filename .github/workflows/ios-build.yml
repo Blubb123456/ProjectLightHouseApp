@@ -80,49 +80,57 @@ jobs:
 
       - name: Build Unsigned Archive
         run: |
-          # Discovery
-          WORKSPACE_PATH=$(find . -name "*.xcworkspace" -not -path "*/Pods/*" | head -n 1)
-          DETECTED_SCHEME=$(basename "$WORKSPACE_PATH" .xcworkspace)
+          # 1. Setup environment
+          export NODE_BINARY=$(command -v node)
+          
+          # 2. Fix the Scheme/Target mismatch
+          # We force the scheme to match what Expo actually generated
+          WORKSPACE_PATH=$(find ios -name "*.xcworkspace" -maxdepth 2 | head -n 1)
+          SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
+          
+          echo "Building Scheme: $SCHEME_NAME"
 
+          # 3. The Clean Build Command
+          set -o pipefail
           xcodebuild archive \
             -workspace "$WORKSPACE_PATH" \
-            -scheme "$DETECTED_SCHEME" \
+            -scheme "$SCHEME_NAME" \
             -configuration Release \
             -archivePath $(pwd)/build/ProjectLighthouse.xcarchive \
             -destination "generic/platform=iOS" \
             -derivedDataPath /tmp/DerivedData \
-            -IDEBuildOperationMaxNumberOfConcurrentCompileTasks=1 \
-            -parallelizeTargets=NO \
+            -IDEBuildOperationMaxNumberOfConcurrentCompileTasks=4 \
             USE_HEADERMAP=NO \
+            CLANG_ENABLE_MODULES=YES \
             OTHER_CFLAGS='$(inherited) -Wno-error=non-modular-include-in-framework-module' \
-            OTHER_CPLUSPLUSFLAGS='$(inherited) -Wno-error=non-modular-include-in-framework-module' \
-            SWIFT_COMPILATION_MODE=singlefile \
-            ENABLE_USER_SCRIPT_SANDBOXING=NO \
-            COMPILER_INDEX_STORE_ENABLE=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
             archive | tee xcodebuild.log
 
       - name: Package IPA
+        if: success() || failure() # Run even if previous step had warnings
         run: |
-          # 1. Ensure we are in the right spot
           mkdir -p build/Payload
           
-          # 2. Find the .app folder inside the archive
-          # We use a broader search in case the archive name is slightly different
-          APP_PATH=$(find /tmp/DerivedData -name "*.app" -type d | grep "Release-iphoneos" | head -n 1)
+          # Look in the Archive first, then Fallback to DerivedData
+          APP_PATH=$(find build/ProjectLighthouse.xcarchive -name "*.app" -type d | head -n 1)
           
           if [ -z "$APP_PATH" ]; then
-            echo "❌ ERROR: No .app file found. The build likely failed."
+            echo "Archive empty, searching DerivedData..."
+            APP_PATH=$(find /tmp/DerivedData -name "*.app" -type d | grep "Release-iphoneos" | head -n 1)
+          fi
+
+          if [ -z "$APP_PATH" ]; then
+            echo "❌ ERROR: No .app file found. Build logs follow:"
+            tail -n 50 xcodebuild.log
             exit 1
           fi
-          
-          echo "Found App at: $APP_PATH"
-          
-          # 3. Copy to Payload and Zip
-          cp -R "$APP_PATH" build/Payload/
-          cd build && zip -r ProjectLighthouse.ipa Payload
+
+          echo "✅ Found App at: $APP_PATH"
+          cp -R "$APP_PATH/" build/Payload/
+          cd build && zip -yr ProjectLighthouse.ipa Payload
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
