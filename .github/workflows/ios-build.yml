@@ -91,24 +91,17 @@ jobs:
           echo "export NODE_BINARY=$(command -v node)" > .xcode.env
           echo "export NODE_BINARY=$(command -v node)" > .xcode.env.local
           
-          mkdir -p scripts/xcode
-          cp ../node_modules/react-native/scripts/xcode/with-environment.sh scripts/xcode/ || true
-
-          # 1. Bump the main project target to 16.0
+          # 1. Bump the main platform line to 15.1
           sed -i '' 's/platform :ios, .*/platform :ios, "15.1"/' Podfile
 
-          # 2. THE NUCLEAR HOOK: Force every pod to 16.0 to fix ReactAppDependencyProvider
-          # This appends a post_install hook to the end of the Podfile
-          cat <<EOF >> Podfile
-
-          post_install do |installer|
-          installer.pods_project.targets.each do |target|
-          target.build_configurations.each do |config|
-          config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-              end
-            end
-          end
-          EOF
+          # 2. INJECT logic into the existing post_install block
+          # This looks for the start of the hook and inserts our version override immediately after it
+          sed -i '' '/post_install do |installer|/a \
+            installer.pods_project.targets.each do |target| \
+              target.build_configurations.each do |config| \
+                config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "15.1" \
+              end \
+            end' Podfile
       
       - name: Install Pods
         run: |
