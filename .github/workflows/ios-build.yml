@@ -76,6 +76,8 @@ jobs:
                   config.build_settings['DEBUG_INFORMATION_FORMAT'] = 'dwarf'
                   config.build_settings['USE_HEADERMAP'] = 'NO'
                   config.build_settings['ALWAYS_SEARCH_USER_PATHS'] = 'NO'
+                  config.build_settings['STRIP_INSTALLED_PRODUCT'] = 'NO'
+                  config.build_settings['COPY_PHASE_STRIP'] = 'NO'
                   if target.name == 'hermes-engine'
                     target.build_phases.delete_if do |phase|
                     phase.respond_to?(:name) && phase.name.include?('Replace Hermes')
@@ -152,6 +154,10 @@ jobs:
             unzip -o hermes-runtime-darwin.zip -d dest/ || true
           fi
           cd ../../..
+      - name: Inspect Build Logs for Errors
+        if: failure()
+        run: |
+          grep -A 5 "error:" xcodebuild.log || echo "No explicit error found in logs."   
           
       - name: Build Unsigned Archive
         run: |
@@ -174,6 +180,9 @@ jobs:
           # 4. The Archive Command
           # Added 'ENABLE_PREVIEWS=NO' to resolve the Swift Optimization note
           set -o pipefail
+          export SKIP_BUNDLING=1 # We already bundled manually in the previous step
+          export RCT_NO_LAUNCH_PACKAGER=1
+          export PREFIX_NODE_BIN=$(command -v node)
           xcodebuild archive \
             -workspace "$WORKSPACE_PATH" \
             -scheme "$DETECTED_SCHEME" \
