@@ -78,6 +78,9 @@ jobs:
             config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
             config.build_settings['STRIP_INSTALLED_PRODUCT'] = 'NO'
             config.build_settings['COPY_PHASE_STRIP'] = 'NO'
+            if target.name == 'ZXingObjC'
+              config.build_settings['USER_HEADER_SEARCH_PATHS'] = '"$(PODS_ROOT)/ZXingObjC/**"'
+                  end
                 end
               end
             end
