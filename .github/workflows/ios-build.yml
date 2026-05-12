@@ -89,11 +89,12 @@ jobs:
                   config.build_settings['ALWAYS_SEARCH_USER_PATHS'] = 'NO'
                   config.build_settings['STRIP_INSTALLED_PRODUCT'] = 'NO'
                   config.build_settings['COPY_PHASE_STRIP'] = 'NO'
-                  if ['fmt', 'DoubleConversion','RCT-Folly', 'ZXingObjC'].include?(target.name)
+                  if ['fmt', 'DoubleConversion','RCT-Folly', 'ZXingObjC', 'SocketRocket'].include?(target.name)
                     target.build_configurations.each do |config|
                     config.build_settings['DEFINES_MODULE'] = 'YES'
                     config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
                     config.build_settings['HEADER_SEARCH_PATHS'] = '$(inherited) "${PODS_ROOT}/fmt/include"'
+                    config.build_settings['HEADER_SEARCH_PATHS'] << '"$(PODS_ROOT)/Headers/Public/SocketRocket" '
                     config.build_settings['HEADER_SEARCH_PATHS'] << '"$(PODS_ROOT)/Headers/Public/fmt" '
                     config.build_settings['HEADER_SEARCH_PATHS'] << '"$(PODS_ROOT)/fmt/include" '
                       if target.name == 'ZXingObjC'
@@ -223,6 +224,8 @@ jobs:
             -derivedDataPath /tmp/DerivedData \
             -IDEBuildOperationMaxNumberOfConcurrentCompileTasks=1 \
             -parallelizeTargets=NO \
+            -disable-custom-llvm-modules # Add this flag to bypass strict module scanning \
+            OTHER_CPLUSPLUSFLAGS='$(inherited) -Wno-error=non-modular-include-in-framework-module' \
             USE_HEADERMAP=NO \
             OTHER_CFLAGS='$(inherited) -Wno-error=non-modular-include-in-framework-module' \
             DISABLE_MANUAL_TARGET_ORDER_PROCESSING=YES \
