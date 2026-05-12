@@ -85,23 +85,31 @@ jobs:
          # EOF
           
           #pod install --repo-update
-      - name: Inject Xcode Environment & Fix Swift Targets
+      - name: Patch Podfile for iOS 15.1
         run: |
           cd ios
           echo "export NODE_BINARY=$(command -v node)" > .xcode.env
           echo "export NODE_BINARY=$(command -v node)" > .xcode.env.local
           
-          # 1. Force the main platform line to 15.1
-          sed -i '' 's/platform :ios, .*/platform :ios, "15.1"/' Podfile
-
-          # 2. Inject the version override logic carefully
-          # This inserts the loop BEFORE the react_native_post_install call to avoid syntax collisions
-          sed -i '' '/react_native_post_install/i \
-            installer.pods_project.targets.each do |target| \
-              target.build_configurations.each do |config| \
-                config.build_settings["IPHONEOS_DEPLOYMENT_TARGET"] = "15.1" \
-              end \
-            end' Podfile
+          # Use Python to safely inject the logic without mangling line breaks
+          python3 -c "
+          import sys
+          content = open('Podfile').read()
+          # 1. Update the platform line
+          import re
+          content = re.sub(r'platform :ios, .*', 'platform :ios, \"15.1\"', content)
+          # 2. Inject the target override logic correctly
+          patch = \"\"\"
+            installer.pods_project.targets.each do |target|
+              target.build_configurations.each do |config|
+                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+              end
+            end
+            react_native_post_install\"\"\"
+          content = content.replace('react_native_post_install', patch)
+          with open('Podfile', 'w') as f:
+              f.write(content)
+          "
       
       - name: Install Pods
         run: |
