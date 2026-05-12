@@ -59,26 +59,19 @@ jobs:
             )
 
             post_install do |installer|
-            installer.pods_project.targets.each do |target|
-            target.build_configurations.each do |config|
-            config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-            config.build_settings['GCC_OPTIMIZATION_LEVEL'] = '0'
-            config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
-            config.build_settings['COMPILER_INDEX_STORE_ENABLE'] = 'NO'
-            config.build_settings['GCC_GENERATE_DEBUGGING_SYMBOLS'] = 'NO'
-              end
-            end
-
-          # 2. Update the main project targets (for modern CocoaPods versions)
-          if installer.respond_to?(:generated_projects)
-            installer.generated_projects.each do |project|
-            project.targets.each do |target|
-            target.build_configurations.each do |config|
-            config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-            config.build_settings['GCC_OPTIMIZATION_LEVEL'] = '0'
-            config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
-            config.build_settings['COMPILER_INDEX_STORE_ENABLE'] = 'NO'
-                  end
+              installer.pods_project.targets.each do |target|
+                target.build_configurations.each do |config|
+                  # CRITICAL: Disable Sandboxing for Xcode 16/macOS 15
+                  config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+                  config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+                  config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
+                  config.build_settings['CODE_SIGN_IDENTITY'] = ''
+                  config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+                  config.build_settings['GCC_OPTIMIZATION_LEVEL'] = '0'
+                  config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
+                  config.build_settings['COMPILER_INDEX_STORE_ENABLE'] = 'NO'
+                  config.build_settings['GCC_GENERATE_DEBUGGING_SYMBOLS'] = 'NO'
+                  config.build_settings['GCC_WARN_INHIBIT_ALL_WARNINGS'] = 'YES'
                 end
               end
             end
