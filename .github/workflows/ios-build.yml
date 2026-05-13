@@ -29,19 +29,16 @@ jobs:
           # This appends a script to the end of your Podfile that forces Xcode 16 compatibility
           cat <<'EOF' >> Podfile
 
-post_install do |installer|
-  installer.pods_project.targets.each do |target|
-    target.build_configurations.each do |config|
-      # Force Swift Optimization to -Onone to stop the 'Disabling Previews' build failure
-      config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
-      # Disable sandboxing which often breaks GitHub Action script phases
-      config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-      # Ensure deployment target is consistent
-      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-    end
-  end
-end
-EOF
+          post_install do |installer|
+          installer.pods_project.targets.each do |target|
+          target.build_configurations.each do |config|
+          config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
+          config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+          config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+              end
+            end
+          end
+          EOF
 
       - name: Install Pods
         run: |
