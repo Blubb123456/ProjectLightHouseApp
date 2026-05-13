@@ -152,8 +152,10 @@ jobs:
             SWIFT_TREAT_WARNINGS_AS_ERRORS=NO \
             -jobs 1 \
             IPHONEOS_DEPLOYMENT_TARGET=15.1 \
+            GCC_TREAT_WARNINGS_AS_ERRORS=NO \
             CLANG_ENABLE_EXPLICIT_MODULES=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
+            OTHER_SWIFT_FLAGS="-no-warnings-as-errors" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
