@@ -68,7 +68,7 @@ jobs:
                   #config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
                   # 2. Xcode 16 Permissions & Sandbox
                  # config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-                  
+
                   # 3. Optimization & Stability
                  # config.build_settings['GCC_OPTIMIZATION_LEVEL'] = '0'
                   #config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
@@ -83,47 +83,55 @@ jobs:
            # end
           #end # This was the missing 'end' for the target block
          # EOF
-          
-          #pod install --repo-update
-      - name: Clean Cache and Patch Podfile
-        run: |
-          # 1. Standard Bash command to clear the poisoned cache
-          rm -rf ~/Library/Developer/Xcode/DerivedData/ModuleCache.noindex
-          
-          cd ios
-          # 2. Use a quoted Heredoc (<< 'EOF') to prevent Shell expansion of $ variables
-          python3 << 'EOF'
-          import re
 
-          file_path = 'Podfile'
-          with open(file_path, 'r') as f:
+          #pod install --repo-update
+      - name: Fix Podfile Syntax & Apply iOS 15 Fixes
+        run: |
+          rm -rf ~/Library/Developer/Xcode/DerivedData/ModuleCache.noindex
+          cd ios
+          # Use Python to surgically fix the block without relying on git checkout
+          python3 -c "
+          import re
+          import os
+
+          if not os.path.exists('Podfile'):
+              print('Podfile not found')
+              exit(1)
+
+          with open('Podfile', 'r') as f:
               content = f.read()
 
-          # Force global platform to 15.1
-          content = re.sub(r"platform :ios, .*", "platform :ios, '15.1'", content)
+          # 1. Force the platform to 15.1
+          content = re.sub(r'platform :ios, .*', 'platform :ios, \"15.1\"', content)
 
-          # This logic string is what fixes the Exit Code 65 you were seeing
-          fix_logic = """
+          # 2. Define the exact fix block
+          fix_logic = \"\"\"
             react_native_post_install(installer)
             installer.pods_project.targets.each do |target|
               target.build_configurations.each do |config|
                 config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-                config.build_settings['OTHER_SWIFT_FLAGS'] = '$(inherited) -no-verify-emitted-module-interface'
-                config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+                config.build_settings['SWIFT_STRICT_CONCURRENCY'] = 'minimal'
+                config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
+                config.build_settings['LIBRARY_SEARCH_PATHS'] = ['$(inherited)', '$(TOOLCHAIN_DIR)/usr/lib/swift/iphoneos', '$(TOOLCHAIN_DIR)/usr/lib/swift-5.0/iphoneos']
+                config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
               end
             end
-          """
+          \"\"\"
 
-          # Inject the logic into the post_install block
+          # 3. Use a more robust replacement that preserves the final 'end'
+          # This replaces the logic BETWEEN 'post_install do |installer|' and the next 'end'
           if 'post_install do |installer|' in content:
-              # This regex replaces the entire block to ensure your new flags are active
-              pattern = r'post_install do \|installer\|.*?end'
-              content = re.sub(pattern, f"post_install do |installer|{fix_logic}end", content, flags=re.DOTALL)
+              pattern = r'(post_install do \|installer\|)(.*?)(\n  end)'
+              content = re.sub(pattern, r'\\1' + fix_logic + r'\\3', content, flags=re.DOTALL)
+          else:
+              # If no post_install exists, append it before the final end of the file
+              content = content.rstrip()
+              if content.endswith('end'):
+                  content = content[:-3] + \"\\n  post_install do |installer|\" + fix_logic + \"  end\\nend\"
 
-          with open(file_path, 'w') as f:
+          with open('Podfile', 'w') as f:
               f.write(content)
-          EOF
-          
+          "
       - name: Patch Hermes for Xcode 16
         run: |
           FILE="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
@@ -159,20 +167,8 @@ jobs:
           python3 -c "
           import re
           import os
-          rm -rf ~/Library/Developer/Xcode/DerivedData/ModuleCache.noindex
           with open('Podfile', 'r') as f:
               content = f.read()
-
-          # 1. Ensure the platform is set to 15.1
-          content = re.sub(r'platform :ios, .*', 'platform :ios, \"15.1\"', content)
-
-          # 2. Define the refined post_install logic
-          # We include the Swift verification bypass and the ExpoModulesCore precompile fix
-          fix_logic = \"\"\"
-            react_native_post_install(installer)
-            installer.pods_project.targets.each do |target|
-              target.build_configurations.each do |config|
-                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
                 config.build_settings['SWIFT_STRICT_CONCURRENCY'] = 'minimal'
                 config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++20'
                 config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
@@ -181,10 +177,6 @@ jobs:
                 # Fix for Xcode 16 Swift Module interface failures
                 config.build_settings['OTHER_SWIFT_FLAGS'] = '$(inherited) -no-verify-emitted-module-interface'
                 config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
-                config.build_settings['LIBRARY_SEARCH_PATHS'] = ['$(inherited)', '$(TOOLCHAIN_DIR)/usr/lib/swift/iphoneos', '$(TOOLCHAIN_DIR)/usr/lib/swift-5.0/iphoneos']
-              end
-              
-              # Specific bypass for ExpoModulesCore bridging header issues in Xcode 16
               if target.name == 'ExpoModulesCore'
                 target.build_configurations.each do |config|
                   config.build_settings['SWIFT_PRECOMPILE_BRIDGING_HEADER'] = 'NO'
