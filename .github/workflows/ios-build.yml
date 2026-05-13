@@ -152,6 +152,18 @@ jobs:
           # Link the helper script if it's missing from the expected path
           mkdir -p scripts/xcode
           cp ../node_modules/react-native/scripts/xcode/with-environment.sh scripts/xcode/ || true
+      
+      - name: Patch React Native C++20 incompatibility
+        run: |
+          FILE_PATH="node_modules/react-native/ReactCommon/reactperflogger/fusebox/FuseboxTracer.cpp"
+          if [ -f "$FILE_PATH" ]; then
+            # Replace .contains(key) with .find(key) != .end()
+            sed -i '' 's/!trackIdMap.contains(event.track)/trackIdMap.find(event.track) == trackIdMap.end()/g' "$FILE_PATH"
+            sed -i '' 's/trackIdMap.contains(event.track)/trackIdMap.find(event.track) != trackIdMap.end()/g' "$FILE_PATH"
+            echo "Successfully patched FuseboxTracer.cpp for C++17"
+          else
+            echo "File not found, skipping patch"
+          fi
           
       - name: Build Unsigned Archive
         run: |
