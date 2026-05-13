@@ -85,23 +85,22 @@ jobs:
          # EOF
           
           #pod install --repo-update
-      - name: Clean Slate Podfile Patch
+      - name: Fix Podfile Syntax & Apply iOS 15 Fixes
         run: |
           cd ios
+          # 1. Reset the Podfile to clear out the broken patches
+          git checkout Podfile
+          
+          # 2. Use Python to replace ONLY the post_install block content
+          # We are being specific so we don't eat the final 'end' of the file.
           python3 -c "
           import re
-          
           with open('Podfile', 'r') as f:
               content = f.read()
 
-          # 1. Strip any existing post_install blocks to avoid duplication/syntax errors
-          # This looks for 'post_install' and everything until the final 'end'
-          content = re.sub(r'post_install do \|installer\|.*', '', content, flags=re.DOTALL).strip()
-
-          # 2. Define the new, perfectly balanced block
-          # Note: We include react_native_post_install(installer) which is standard for RN 0.70+
-          new_post_install = \"\"\"
-          post_install do |installer|
+          # This replacement includes 3 'ends' for the 3 'dos' we start.
+          # It leaves the rest of the file (and its final 'end') untouched.
+          new_block = \"\"\"post_install do |installer|
             react_native_post_install(installer)
             installer.pods_project.targets.each do |target|
               target.build_configurations.each do |config|
@@ -112,12 +111,14 @@ jobs:
                 config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
               end
             end
-          end
-          \"\"\"
+          end\"\"\"
 
-          # 3. Append the clean block
+          # Replace the old post_install block with our fixed one
+          # The regex stops at the first 'end' it finds, so we match the structure precisely.
+          content = re.sub(r'post_install do \|installer\|.*?end', new_block, content, flags=re.DOTALL)
+
           with open('Podfile', 'w') as f:
-              f.write(content + \"\\n\" + new_post_install)
+              f.write(content)
           "
       
       - name: Install Pods
