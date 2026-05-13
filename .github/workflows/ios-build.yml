@@ -149,18 +149,25 @@ jobs:
           node patch-hermes.js
           rm patch-hermes.js
           
-      - name: Hard-Reset Podfile and Build
+      - name: Dynamic Podfile Reset and Build
         run: |
-          # 1. KILL ALL CACHES
+          # 1. KILL CACHES
           rm -rf ~/Library/Developer/Xcode/DerivedData
           rm -rf ios/Pods
           rm -rf ios/Podfile.lock
 
-          # 2. OVERWRITE PODFILE - Added the necessary 'require' line
-          cat << 'EOF' > ios/Podfile
-          # This line is what was missing; it loads the use_native_modules logic
-          require_relative '../node_modules/react-native/scripts/react_native_pods'
-          require_relative '../node_modules/@react-native-community/cli-platform-ios/native_modules'
+          # 2. LOCATE SCRIPTS DYNAMICALLY
+          # We find the absolute paths so 'require' cannot fail
+          RN_PODS_PATH=$(find . -name "react_native_pods.rb" | head -n 1)
+          NATIVE_MODULES_PATH=$(find . -name "native_modules.rb" | grep "cli-platform-ios" | head -n 1)
+          
+          echo "Found RN Pods at: $RN_PODS_PATH"
+          echo "Found Native Modules at: $NATIVE_MODULES_PATH"
+
+          # 3. OVERWRITE PODFILE WITH ABSOLUTE PATHS
+          cat << EOF > ios/Podfile
+          require '$PWD/$RN_PODS_PATH'
+          require '$PWD/$NATIVE_MODULES_PATH'
 
           platform :ios, '15.1'
           
@@ -179,9 +186,9 @@ jobs:
                   config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
                   config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
                   
-                  # The flags to kill Exit Code 65
+                  # Flags to bypass the Xcode 16 Swift module validation (Exit Code 65)
                   config.build_settings['OTHER_SWIFT_FLAGS'] = [
-                    '$(inherited)', 
+                    '\$(inherited)', 
                     '-no-verify-emitted-module-interface',
                     '-Xfrontend', 
                     '-disable-modules-validate-system-headers'
@@ -192,17 +199,17 @@ jobs:
           end
           EOF
 
-          # 3. FRESH INSTALL
+          # 4. FRESH INSTALL
           cd ios
           pod install --repo-update
           
-          # 4. THE BUILD COMMAND
+          # 5. THE BUILD COMMAND
           cd ..
           xcodebuild archive \
             -workspace ios/ProjectLightHouseReactApp.xcworkspace \
             -scheme ProjectLightHouseReactApp \
             -configuration Release \
-            -archivePath $(pwd)/build/ProjectLighthouse.xcarchive \
+            -archivePath \$(pwd)/build/ProjectLighthouse.xcarchive \
             -destination "generic/platform=iOS" \
             -parallelizeTargets=NO \
             IPHONEOS_DEPLOYMENT_TARGET=15.1 \
