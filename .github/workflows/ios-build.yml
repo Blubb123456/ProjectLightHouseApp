@@ -88,19 +88,23 @@ jobs:
       - name: Fix Podfile Syntax & Apply iOS 15 Fixes
         run: |
           cd ios
-          # 1. Reset the Podfile to clear out the broken patches
-          git checkout Podfile
-          
-          # 2. Use Python to replace ONLY the post_install block content
-          # We are being specific so we don't eat the final 'end' of the file.
+          # Use Python to surgically fix the block without relying on git checkout
           python3 -c "
           import re
+          import os
+
+          if not os.path.exists('Podfile'):
+              print('Podfile not found')
+              exit(1)
+
           with open('Podfile', 'r') as f:
               content = f.read()
 
-          # This replacement includes 3 'ends' for the 3 'dos' we start.
-          # It leaves the rest of the file (and its final 'end') untouched.
-          new_block = \"\"\"post_install do |installer|
+          # 1. Force the platform to 15.1
+          content = re.sub(r'platform :ios, .*', 'platform :ios, \"15.1\"', content)
+
+          # 2. Define the exact fix block
+          fix_logic = \"\"\"
             react_native_post_install(installer)
             installer.pods_project.targets.each do |target|
               target.build_configurations.each do |config|
@@ -111,11 +115,18 @@ jobs:
                 config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
               end
             end
-          end\"\"\"
+          \"\"\"
 
-          # Replace the old post_install block with our fixed one
-          # The regex stops at the first 'end' it finds, so we match the structure precisely.
-          content = re.sub(r'post_install do \|installer\|.*?end', new_block, content, flags=re.DOTALL)
+          # 3. Use a more robust replacement that preserves the final 'end'
+          # This replaces the logic BETWEEN 'post_install do |installer|' and the next 'end'
+          if 'post_install do |installer|' in content:
+              pattern = r'(post_install do \|installer\|)(.*?)(\n  end)'
+              content = re.sub(pattern, r'\\1' + fix_logic + r'\\3', content, flags=re.DOTALL)
+          else:
+              # If no post_install exists, append it before the final end of the file
+              content = content.rstrip()
+              if content.endswith('end'):
+                  content = content[:-3] + \"\\n  post_install do |installer|\" + fix_logic + \"  end\\nend\"
 
           with open('Podfile', 'w') as f:
               f.write(content)
