@@ -187,34 +187,41 @@ jobs:
               f.write(content)
           "
       
-      - name: Surgical Patch for Hermes Executor
+      - name: Bulletproof Patch for Hermes Executor
         run: |
-          FILE_PATH="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
-          if [ -f "$FILE_PATH" ]; then
-            # 1. Reset to clean state
-            git checkout "$FILE_PATH" || true
+          # 1. Reset the file to erase our previous sed damage
+          git checkout node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp || true
+          
+          # 2. Use a Node script for safe, multiline regex replacement
+          cat << 'EOF' > patch-hermes.js
+          const fs = require('fs');
+          const file = 'node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp';
+          
+          if (fs.existsSync(file)) {
+            let code = fs.readFileSync(file, 'utf8');
             
-            # 2. Force include <thread> at the top
-            sed -i '' '1i\
-            #include <thread>
-            ' "$FILE_PATH"
-
-            # 3. Comment out the anonymous namespace start
-            # We look for 'namespace {' that appears shortly before 'class DecoratedRuntime'
-            sed -i '' '/namespace {/{N;s/namespace {\nclass DecoratedRuntime/\/* namespace { *\/\nclass DecoratedRuntime/;}' "$FILE_PATH"
+            // Fix A: Add missing <thread> header for Xcode 16
+            // (Resolves 'undeclared identifier expected' and 'no member named thread')
+            if (!code.includes('#include <thread>')) {
+              code = '#include <thread>\n' + code;
+            }
             
-            # 4. Comment out the anonymous namespace end
-            # We look for the closing brace that comes immediately after the DecoratedRuntime class definition
-            # but BEFORE the HermesExecutorFactory definitions begin.
-            sed -i '' 's/^} \/\/ namespace$/\/* } \/\/ namespace *\//' "$FILE_PATH"
+            // Fix B: Explicit pointer cast
+            // (Resolves 'static_cast from __compressed_pair... not related by inheritance')
+            code = code.replace(
+              /return std::make_unique<HermesExecutor>\(\s*decoratedRuntime,/g,
+              'return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(decoratedRuntime),'
+            );
             
-            # 5. Fix the pointer cast mismatch
-            sed -i '' 's/return std::make_unique<HermesExecutor>(decoratedRuntime,/return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(decoratedRuntime),/g' "$FILE_PATH"
-            
-            echo "Successfully applied surgical patch."
-          else
-            echo "File not found."
-          fi
+            fs.writeFileSync(file, code);
+            console.log('✅ Hermes patched successfully via Node.js.');
+          } else {
+            console.log('⚠️ HermesExecutorFactory.cpp not found.');
+          }
+          EOF
+          
+          node patch-hermes.js
+          rm patch-hermes.js
           
       - name: Build Unsigned Archive
         run: |
