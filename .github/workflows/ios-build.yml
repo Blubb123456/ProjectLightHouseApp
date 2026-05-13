@@ -191,17 +191,16 @@ jobs:
         run: |
           FILE_PATH="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
           if [ -f "$FILE_PATH" ]; then
-            # We need to cast the decoratedRuntime to a shared_ptr<facebook::jsi::Runtime>
-            # to satisfy the HermesExecutor constructor requirements.
-            sed -i '' 's/return std::make_unique<HermesExecutor>(/return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(decoratedRuntime),/g' "$FILE_PATH"
+            # Clean up any previous failed attempts first
+            git checkout "$FILE_PATH" || true
             
-            # The previous line might duplicate the argument if 'decoratedRuntime' is already the first arg.
-            # Let's use a more precise regex to clean up the constructor call.
-            sed -i '' 's/decoratedRuntime, decoratedRuntime/std::static_pointer_cast<facebook::jsi::Runtime>(decoratedRuntime)/g' "$FILE_PATH"
+            # Use a more robust substitution: 
+            # Replace 'decoratedRuntime,' with the casted version only once.
+            sed -i '' 's/return std::make_unique<HermesExecutor>(decoratedRuntime,/return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(decoratedRuntime),/g' "$FILE_PATH"
             
-            echo "Successfully patched HermesExecutorFactory.cpp"
+            echo "Successfully applied precise patch to HermesExecutorFactory.cpp"
           else
-            echo "HermesExecutorFactory.cpp not found, skipping."
+            echo "File not found, skipping."
           fi
           
       - name: Build Unsigned Archive
