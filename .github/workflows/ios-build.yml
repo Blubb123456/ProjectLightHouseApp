@@ -155,7 +155,7 @@ jobs:
             -parallelizeTargets=NO \
             SWIFT_TREAT_WARNINGS_AS_ERRORS=NO \
             -jobs 1 \
-            IPHONEOS_DEPLOYMENT_TARGET=15.1 \
+            IPHONEOS_DEPLOYMENT_TARGET=15.4 \
             GCC_TREAT_WARNINGS_AS_ERRORS=NO \
             CLANG_ENABLE_EXPLICIT_MODULES=NO \
             CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES=YES \
