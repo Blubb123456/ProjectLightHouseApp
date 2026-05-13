@@ -167,17 +167,17 @@ jobs:
       
       - name: Global C++17 Compatibility Patch
         run: |
-          # Target the specific directories where these C++20 leaks are occurring
           TARGET_DIR="node_modules/react-native/ReactCommon"
+          echo "Patching C++20 leaks (.contains and .starts_with) in $TARGET_DIR..."
           
-          echo "Patching C++20 .contains() usage in $TARGET_DIR..."
-          
-          # Use find to catch all .cpp and .h files and replace .contains(...) with .count(...)
-          # .count() is available in C++17 and returns 1 if the key exists, making it an 
-          # identical drop-in for boolean checks.
+          # 1. Fix .contains() by replacing it with .count()
           find "$TARGET_DIR" -type f \( -name "*.cpp" -o -name "*.h" \) -exec sed -i '' 's/\.contains(/.count(/g' {} +
           
-          echo "Global patch applied."
+          # 2. Fix .starts_with() by replacing it with .rfind(arg, 0) == 0
+          # This is the standard C++17 way to check the beginning of a string.
+          find "$TARGET_DIR" -type f \( -name "*.cpp" -o -name "*.h" \) -exec sed -i '' 's/\.starts_with(\([^)]*\))/.rfind(\1, 0) == 0/g' {} +
+          
+          echo "Global patch for C++17 applied successfully."
           
       - name: Build Unsigned Archive
         run: |
