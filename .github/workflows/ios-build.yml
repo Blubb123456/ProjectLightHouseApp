@@ -191,14 +191,15 @@ jobs:
         run: |
           FILE_PATH="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
           if [ -f "$FILE_PATH" ]; then
-            # Clean up any previous failed attempts first
+            # Revert any messy previous sed attempts to ensure a clean file
             git checkout "$FILE_PATH" || true
             
-            # Use a more robust substitution: 
-            # Replace 'decoratedRuntime,' with the casted version only once.
-            sed -i '' 's/return std::make_unique<HermesExecutor>(decoratedRuntime,/return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(decoratedRuntime),/g' "$FILE_PATH"
+            # Explicitly cast the first argument to the base jsi::Runtime pointer type
+            # This satisfies the 6-argument constructor requirement
+            sed -i '' 's/return std::make_unique<HermesExecutor>(/return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(/g' "$FILE_PATH"
+            sed -i '' 's/decoratedRuntime, /decoratedRuntime), /g' "$FILE_PATH"
             
-            echo "Successfully applied precise patch to HermesExecutorFactory.cpp"
+            echo "Successfully patched HermesExecutorFactory.cpp"
           else
             echo "File not found, skipping."
           fi
