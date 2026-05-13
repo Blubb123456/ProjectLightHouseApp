@@ -164,6 +164,20 @@ jobs:
           else
             echo "File not found, skipping patch"
           fi
+      
+      - name: Global C++17 Compatibility Patch
+        run: |
+          # Target the specific directories where these C++20 leaks are occurring
+          TARGET_DIR="node_modules/react-native/ReactCommon"
+          
+          echo "Patching C++20 .contains() usage in $TARGET_DIR..."
+          
+          # Use find to catch all .cpp and .h files and replace .contains(...) with .count(...)
+          # .count() is available in C++17 and returns 1 if the key exists, making it an 
+          # identical drop-in for boolean checks.
+          find "$TARGET_DIR" -type f \( -name "*.cpp" -o -name "*.h" \) -exec sed -i '' 's/\.contains(/.count(/g' {} +
+          
+          echo "Global patch applied."
           
       - name: Build Unsigned Archive
         run: |
