@@ -151,13 +151,17 @@ jobs:
           
       - name: Hard-Reset Podfile and Build
         run: |
-          # 1. KILL ALL CACHES - Clean slate for Attempt 401
+          # 1. KILL ALL CACHES
           rm -rf ~/Library/Developer/Xcode/DerivedData
           rm -rf ios/Pods
           rm -rf ios/Podfile.lock
 
-          # 2. OVERWRITE PODFILE - Using 'cat' to avoid Python syntax errors
+          # 2. OVERWRITE PODFILE - Added the necessary 'require' line
           cat << 'EOF' > ios/Podfile
+          # This line is what was missing; it loads the use_native_modules logic
+          require_relative '../node_modules/react-native/scripts/react_native_pods'
+          require_relative '../node_modules/@react-native-community/cli-platform-ios/native_modules'
+
           platform :ios, '15.1'
           
           target 'ProjectLightHouseReactApp' do
@@ -171,12 +175,11 @@ jobs:
               react_native_post_install(installer)
               installer.pods_project.targets.each do |target|
                 target.build_configurations.each do |config|
-                  # Force the environment to recognize 15.1
                   config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
                   config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
                   config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
                   
-                  # SILENCE THE COMPILER: This stops the Exit Code 65 Swift errors
+                  # The flags to kill Exit Code 65
                   config.build_settings['OTHER_SWIFT_FLAGS'] = [
                     '$(inherited)', 
                     '-no-verify-emitted-module-interface',
@@ -193,7 +196,7 @@ jobs:
           cd ios
           pod install --repo-update
           
-          # 4. THE BUILD COMMAND - All flags included here as a backup
+          # 4. THE BUILD COMMAND
           cd ..
           xcodebuild archive \
             -workspace ios/ProjectLightHouseReactApp.xcworkspace \
