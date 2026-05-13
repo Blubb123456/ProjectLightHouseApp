@@ -187,7 +187,23 @@ jobs:
               f.write(content)
           "
       
-      
+      - name: Patch Hermes Type Mismatch
+        run: |
+          FILE_PATH="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
+          if [ -f "$FILE_PATH" ]; then
+            # We need to cast the decoratedRuntime to a shared_ptr<facebook::jsi::Runtime>
+            # to satisfy the HermesExecutor constructor requirements.
+            sed -i '' 's/return std::make_unique<HermesExecutor>(/return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(decoratedRuntime),/g' "$FILE_PATH"
+            
+            # The previous line might duplicate the argument if 'decoratedRuntime' is already the first arg.
+            # Let's use a more precise regex to clean up the constructor call.
+            sed -i '' 's/decoratedRuntime, decoratedRuntime/std::static_pointer_cast<facebook::jsi::Runtime>(decoratedRuntime)/g' "$FILE_PATH"
+            
+            echo "Successfully patched HermesExecutorFactory.cpp"
+          else
+            echo "HermesExecutorFactory.cpp not found, skipping."
+          fi
+          
       - name: Build Unsigned Archive
         run: |
           # 1. Discovery (same as before)
