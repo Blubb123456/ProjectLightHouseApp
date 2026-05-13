@@ -85,38 +85,43 @@ jobs:
          # EOF
           
           #pod install --repo-update
-      - name: Nuclear Patch Podfile for iOS 15.1
+      - name: Surgical Patch for ExpoModulesCore
         run: |
           cd ios
-          echo "export NODE_BINARY=$(command -v node)" > .xcode.env
-          echo "export NODE_BINARY=$(command -v node)" > .xcode.env.local
-          
           python3 -c "
           import re
           with open('Podfile', 'r') as f:
               content = f.read()
 
-          # 1. Force everything to 15.1 (The stable floor for iOS 15 builds)
+          # 1. Standardize platform
           content = re.sub(r'platform :ios, .*', 'platform :ios, \"15.1\"', content)
 
-          # 2. Inject the fix block into the start of post_install
+          # 2. Advanced Post-Install Hook
           fix_block = \"\"\"post_install do |installer|
             installer.pods_project.targets.each do |target|
               target.build_configurations.each do |config|
-                # Force version and disable Swift 6 strictness
+                # Force the version floor
                 config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+                
+                # SILENCE SWIFT 6 CONCURRENCY ERRORS
                 config.build_settings['SWIFT_STRICT_CONCURRENCY'] = 'minimal'
                 
-                # Fix for ExpoModulesCore / Swift Concurrency back-deployment
+                # FORCE C++17 (Xcode 16 defaults to C++20 which breaks Expo headers)
+                config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
+                
+                # Fix Swift search paths for back-deployment
                 config.build_settings['LIBRARY_SEARCH_PATHS'] = ['$(inherited)', '$(TOOLCHAIN_DIR)/usr/lib/swift/iphoneos', '$(TOOLCHAIN_DIR)/usr/lib/swift-5.0/iphoneos']
                 
-                # Allow non-modular headers (crucial for React-Core / Expo interaction)
+                # Prevent non-modular header errors in ExpoModulesCore
                 config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
               end
             end\"\"\"
-          
+
           if 'post_install do |installer|' in content:
-              content = content.replace('post_install do |installer|', fix_block)
+              # Replace the existing post_install or append to it
+              content = re.sub(r'post_install do \|installer\|.*?end', fix_block, content, flags=re.DOTALL)
+          else:
+              content += \"\\n\" + fix_block + \"\\nend\"
 
           with open('Podfile', 'w') as f:
               f.write(content)
@@ -163,6 +168,9 @@ jobs:
             -parallelizeTargets=NO \
             SWIFT_TREAT_WARNINGS_AS_ERRORS=NO \
             -jobs 1 \
+            ENABLE_USER_SCRIPT_SANDBOXING=NO \
+            SWIFT_STRICT_CONCURRENCY=minimal \
+            CLANG_CXX_LANGUAGE_STANDARD="gnu++17" \
             IPHONEOS_DEPLOYMENT_TARGET=15.1 \
             GCC_TREAT_WARNINGS_AS_ERRORS=NO \
             CLANG_ENABLE_EXPLICIT_MODULES=NO \
