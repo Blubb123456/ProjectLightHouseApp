@@ -5,167 +5,46 @@ on:
 
 jobs:
   build:
-    runs-on: macos-15 # Xcode 16.x
+    # macos-14 contains Xcode 15.x. macos-15 ONLY has Xcode 16.
+    runs-on: macos-14 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set Xcode Version
-        run: sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+      - name: Set Xcode Version (Dynamic Search)
+        run: |
+          # Find the highest version of Xcode 15 available on this specific runner
+          XCODE_PATH=$(ls -d /Applications/Xcode_15*.app | sort -V | tail -n 1)
+          echo "Switching to: $XCODE_PATH"
+          sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
 
-      - name: Install Node Modules
-        run: npm install # or yarn install, whatever you use
-        
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
 
       - name: Install Dependencies
         run: |
           npm install
+          # Note: Keeping your explicit installs here, but check if these are already in package.json
           npm install --save @tensorflow/tfjs @tensorflow/tfjs-react-native expo-gl expo-camera expo-image-picker expo-file-system expo-constants expo-asset expo-font
           npm install --save-dev @expo/metro-config @react-native/metro-config
       
       - name: Prebuild iOS
-        run: npx expo prebuild --platform ios
+        run: npx expo prebuild --platform ios --no-install
 
-      - name: Create Environment Override
-        run: |
-          cd ios
-          echo "export NODE_BINARY=$(command -v node)" > .xcode.env
-          echo "export NODE_BINARY=$(command -v node)" > .xcode.env.local
-          mkdir -p scripts/xcode
-          cp ../node_modules/react-native/scripts/xcode/with-environment.sh scripts/xcode/ || true
-          
-     # - name: Generate iOS Folder & Configure Podfile
-        #run: |
-          #setup_react_native_env!
-        #  npx expo prebuild --platform ios --clean --no-install
-         # cd ios
-          # We overwrite the Podfile with the correct syntax and the "Surgical Fixes"
-         # cat <<'EOF' > Podfile
-         # require_relative '../node_modules/expo/scripts/autolinking'
-         # require_relative '../node_modules/react-native/scripts/react_native_pods'
-
-         # platform :ios, '15.1'
-         # install! 'cocoapods', :deterministic_uuids => true
-          #use_frameworks! :linkage => :static
-
-         # target 'ProjectLightHouseReactApp' do
-           # use_expo_modules!
-           # config = use_native_modules!
-
-           # use_react_native!(
-            #  :path => config[:reactNativePath],
-             # :hermes_enabled => true,
-            #  :fabric_enabled => false,
-            #  :new_arch_enabled => false
-            #)
-
-           # post_install do |installer|
-             # installer.pods_project.targets.each do |target|
-              #  target.build_configurations.each do |config|
-                  # 1. Global Header & Modular Fixes
-                #  config.build_settings['HEADER_SEARCH_PATHS'] ||= '$(inherited) '
-                #  config.build_settings['HEADER_SEARCH_PATHS'] << '"$(PODS_ROOT)/Headers/Public" '
-                 # config.build_settings['USE_HEADERMAP'] = 'NO'
-                  #config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
-                  #config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-                  # 2. Xcode 16 Permissions & Sandbox
-                 # config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-
-                  # 3. Optimization & Stability
-                 # config.build_settings['GCC_OPTIMIZATION_LEVEL'] = '0'
-                  #config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
-                  #config.build_settings['STRIP_INSTALLED_PRODUCT'] = 'NO'
-                  #config.build_settings['COPY_PHASE_STRIP'] = 'NO'
-
-                 # if target.name == 'ZXingObjC'
-                 #   config.build_settings['USER_HEADER_SEARCH_PATHS'] = '"$(PODS_ROOT)/ZXingObjC/**"'
-                #  end
-               # end
-             # end
-           # end
-          #end # This was the missing 'end' for the target block
-         # EOF
-
-          #pod install --repo-update
-      
-      - name: Patch Hermes for Xcode 16
-        run: |
-          FILE="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
-          if [ -f "$FILE" ]; then
-            echo "Patching HermesExecutorFactory.cpp..."
-            sed -i '' 's/return delegate/return this->delegate/g' "$FILE"
-          fi
-
-      
-      
-      
-      - name: Manual JS Bundle
-        run: |
-          npx expo export:embed --platform ios --dev false --bundle-output ios/main.jsbundle --assets-dest ios
-      
-      - name: Setup Xcode Environment
-        run: |
-          cd ios
-          # This tells Xcode exactly where the Node binary and the environment scripts are
-          echo "export NODE_BINARY=$(command -v node)" > .xcode.env
-          echo "export PATH=$PATH" >> .xcode.env
-          # Link the helper script if it's missing from the expected path
-          mkdir -p scripts/xcode
-          cp ../node_modules/react-native/scripts/xcode/with-environment.sh scripts/xcode/ || true
-      
-      
-      
-      - name: Bulletproof Patch for Hermes Executor
-        run: |
-          # 1. Reset the file to erase our previous sed damage
-          git checkout node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp || true
-          
-          # 2. Use a Node script for safe, multiline regex replacement
-          cat << 'EOF' > patch-hermes.js
-          const fs = require('fs');
-          const file = 'node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp';
-          
-          if (fs.existsSync(file)) {
-            let code = fs.readFileSync(file, 'utf8');
-            
-            // Fix A: Add missing <thread> header for Xcode 16
-            // (Resolves 'undeclared identifier expected' and 'no member named thread')
-            if (!code.includes('#include <thread>')) {
-              code = '#include <thread>\n' + code;
-            }
-            
-            // Fix B: Explicit pointer cast
-            // (Resolves 'static_cast from __compressed_pair... not related by inheritance')
-            code = code.replace(
-              /return std::make_unique<HermesExecutor>\(\s*decoratedRuntime,/g,
-              'return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(decoratedRuntime),'
-            );
-            
-            fs.writeFileSync(file, code);
-            console.log('✅ Hermes patched successfully via Node.js.');
-          } else {
-            console.log('⚠️ HermesExecutorFactory.cpp not found.');
-          }
-          EOF
-          
-          node patch-hermes.js
-          rm patch-hermes.js
-          
       - name: Install Pods
         run: |
           cd ios
           pod install --repo-update
-
+      
       - name: Build Unsigned Archive
         run: |
           WORKSPACE_PATH=$(find ios -name "*.xcworkspace" -maxdepth 2 | head -n 1)
           SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
           
-          # Clean, standard build command. No hacky Swift flags needed on Xcode 15.
+          # We use Xcode 15 settings here. No patches needed for Hermes or Swift flags.
           xcodebuild archive \
             -workspace "$WORKSPACE_PATH" \
             -scheme "$SCHEME_NAME" \
@@ -176,23 +55,16 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            AD_HOC_CODE_SIGNING_ALLOWED=YES
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            COMPILER_INDEX_STORE_ENABLE=NO
 
       - name: Package IPA
         run: |
           mkdir -p build/Payload
-          
-          # 1. Try to find the app inside the Archive first
           APP_PATH=$(find build/ProjectLighthouse.xcarchive -name "*.app" -type d | head -n 1)
 
-          # 2. Fallback: Search DerivedData if Archive failed
           if [ -z "$APP_PATH" ]; then
-            echo "⚠️ Archive not found, searching DerivedData..."
-            APP_PATH=$(find /tmp/DerivedData -name "ProjectLightHouseReactApp.app" -type d | grep "Release-iphoneos" | head -n 1)
-          fi
-
-          if [ -z "$APP_PATH" ]; then
-            echo "❌ ERROR: No .app file found in Archive or DerivedData."
+            echo "❌ ERROR: No .app file found in Archive."
             exit 1
           fi
 
