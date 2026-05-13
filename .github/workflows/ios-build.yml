@@ -85,26 +85,24 @@ jobs:
          # EOF
           
           #pod install --repo-update
-      - name: Clean Cache and Fix Podfile
+      - name: Clean Cache and Patch Podfile
         run: |
-          # 1. This must be a shell command, OUTSIDE the python block
+          # 1. Standard Bash command to clear the poisoned cache
           rm -rf ~/Library/Developer/Xcode/DerivedData/ModuleCache.noindex
           
           cd ios
-          # 2. Use a HEREDOC for Python to avoid quote-nesting hell
+          # 2. Use a quoted Heredoc (<< 'EOF') to prevent Shell expansion of $ variables
           python3 << 'EOF'
           import re
-          import os
 
-          podfile_path = 'Podfile'
-          with open(podfile_path, 'r') as f:
+          file_path = 'Podfile'
+          with open(file_path, 'r') as f:
               content = f.read()
 
-          # Set the deployment target globally in the Podfile text
+          # Force global platform to 15.1
           content = re.sub(r"platform :ios, .*", "platform :ios, '15.1'", content)
 
-          # This logic string is injected into the post_install block
-          # We use \$ to escape the dollar signs so Ruby handles them, not the Shell
+          # This logic string is what fixes the Exit Code 65 you were seeing
           fix_logic = """
             react_native_post_install(installer)
             installer.pods_project.targets.each do |target|
@@ -112,18 +110,17 @@ jobs:
                 config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
                 config.build_settings['OTHER_SWIFT_FLAGS'] = '$(inherited) -no-verify-emitted-module-interface'
                 config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-                config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
               end
             end
           """
 
-          # Replace the existing post_install block
+          # Inject the logic into the post_install block
           if 'post_install do |installer|' in content:
+              # This regex replaces the entire block to ensure your new flags are active
               pattern = r'post_install do \|installer\|.*?end'
-              # Re-insert the block with the fix_logic
               content = re.sub(pattern, f"post_install do |installer|{fix_logic}end", content, flags=re.DOTALL)
 
-          with open(podfile_path, 'w') as f:
+          with open(file_path, 'w') as f:
               f.write(content)
           EOF
           
