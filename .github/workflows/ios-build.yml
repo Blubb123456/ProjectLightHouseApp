@@ -85,46 +85,39 @@ jobs:
          # EOF
           
           #pod install --repo-update
-      - name: Surgical Patch for ExpoModulesCore
+      - name: Clean Slate Podfile Patch
         run: |
           cd ios
           python3 -c "
           import re
+          
           with open('Podfile', 'r') as f:
               content = f.read()
 
-          # 1. Standardize platform
-          content = re.sub(r'platform :ios, .*', 'platform :ios, \"15.1\"', content)
+          # 1. Strip any existing post_install blocks to avoid duplication/syntax errors
+          # This looks for 'post_install' and everything until the final 'end'
+          content = re.sub(r'post_install do \|installer\|.*', '', content, flags=re.DOTALL).strip()
 
-          # 2. Advanced Post-Install Hook
-          fix_block = \"\"\"post_install do |installer|
+          # 2. Define the new, perfectly balanced block
+          # Note: We include react_native_post_install(installer) which is standard for RN 0.70+
+          new_post_install = \"\"\"
+          post_install do |installer|
+            react_native_post_install(installer)
             installer.pods_project.targets.each do |target|
               target.build_configurations.each do |config|
-                # Force the version floor
                 config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-                
-                # SILENCE SWIFT 6 CONCURRENCY ERRORS
                 config.build_settings['SWIFT_STRICT_CONCURRENCY'] = 'minimal'
-                
-                # FORCE C++17 (Xcode 16 defaults to C++20 which breaks Expo headers)
                 config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
-                
-                # Fix Swift search paths for back-deployment
                 config.build_settings['LIBRARY_SEARCH_PATHS'] = ['$(inherited)', '$(TOOLCHAIN_DIR)/usr/lib/swift/iphoneos', '$(TOOLCHAIN_DIR)/usr/lib/swift-5.0/iphoneos']
-                
-                # Prevent non-modular header errors in ExpoModulesCore
                 config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
               end
-            end\"\"\"
+            end
+          end
+          \"\"\"
 
-          if 'post_install do |installer|' in content:
-              # Replace the existing post_install or append to it
-              content = re.sub(r'post_install do \|installer\|.*?end', fix_block, content, flags=re.DOTALL)
-          else:
-              content += \"\\n\" + fix_block + \"\\nend\"
-
+          # 3. Append the clean block
           with open('Podfile', 'w') as f:
-              f.write(content)
+              f.write(content + \"\\n\" + new_post_install)
           "
       
       - name: Install Pods
