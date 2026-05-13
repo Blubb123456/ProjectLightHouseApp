@@ -187,19 +187,23 @@ jobs:
               f.write(content)
           "
       
-      - name: Patch Hermes Type Mismatch
+      - name: Patch Hermes Namespace and Type Mismatch
         run: |
           FILE_PATH="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
           if [ -f "$FILE_PATH" ]; then
-            # Revert any messy previous sed attempts to ensure a clean file
+            # Clean up previous attempts
             git checkout "$FILE_PATH" || true
             
-            # Explicitly cast the first argument to the base jsi::Runtime pointer type
-            # This satisfies the 6-argument constructor requirement
-            sed -i '' 's/return std::make_unique<HermesExecutor>(/return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(/g' "$FILE_PATH"
-            sed -i '' 's/decoratedRuntime, /decoratedRuntime), /g' "$FILE_PATH"
+            # 1. Remove the anonymous namespace start/end around DecoratedRuntime
+            # This fixes the 'static_cast' / '__compressed_pair' inheritance error
+            sed -i '' 's/namespace {/namespace facebook::react { \/\/ Patched for Xcode 16/g' "$FILE_PATH"
+            # Note: We keep the closing brace as is, as it now closes the react namespace
             
-            echo "Successfully patched HermesExecutorFactory.cpp"
+            # 2. Fix the pointer cast we identified earlier
+            # We use a more direct approach: replacing the specific make_unique call
+            sed -i '' 's/return std::make_unique<HermesExecutor>(decoratedRuntime,/return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(decoratedRuntime),/g' "$FILE_PATH"
+            
+            echo "Successfully patched Hermes namespace and pointer types."
           else
             echo "File not found, skipping."
           fi
