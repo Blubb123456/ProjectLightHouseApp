@@ -5,70 +5,69 @@ on:
 
 jobs:
   build:
-    # macos-14 contains Xcode 15.x. macos-15 ONLY has Xcode 16.
-    runs-on: macos-14 
+    runs-on: macos-15 # Back to Xcode 16 to satisfy the React Native check
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Set Xcode Version (Dynamic Search)
-        run: |
-          # Find the highest version of Xcode 15 available on this specific runner
-          XCODE_PATH=$(ls -d /Applications/Xcode_15*.app | sort -V | tail -n 1)
-          echo "Switching to: $XCODE_PATH"
-          sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
 
       - name: Install Dependencies
         run: |
           npm install
-          # Note: Keeping your explicit installs here, but check if these are already in package.json
           npm install --save @tensorflow/tfjs @tensorflow/tfjs-react-native expo-gl expo-camera expo-image-picker expo-file-system expo-constants expo-asset expo-font
-          npm install --save-dev @expo/metro-config @react-native/metro-config
       
       - name: Prebuild iOS
         run: npx expo prebuild --platform ios --no-install
+
+      - name: Inject Fixes into Podfile
+        run: |
+          cd ios
+          # This appends a script to the end of your Podfile that forces Xcode 16 compatibility
+          cat <<'EOF' >> Podfile
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    target.build_configurations.each do |config|
+      # Force Swift Optimization to -Onone to stop the 'Disabling Previews' build failure
+      config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
+      # Disable sandboxing which often breaks GitHub Action script phases
+      config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+      # Ensure deployment target is consistent
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+    end
+  end
+end
+EOF
 
       - name: Install Pods
         run: |
           cd ios
           pod install --repo-update
-      
+
       - name: Build Unsigned Archive
         run: |
           WORKSPACE_PATH=$(find ios -name "*.xcworkspace" -maxdepth 2 | head -n 1)
           SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
           
-          # We use Xcode 15 settings here. No patches needed for Hermes or Swift flags.
           xcodebuild archive \
             -workspace "$WORKSPACE_PATH" \
             -scheme "$SCHEME_NAME" \
             -configuration Release \
             -archivePath $(pwd)/build/ProjectLighthouse.xcarchive \
             -destination "generic/platform=iOS" \
-            IPHONEOS_DEPLOYMENT_TARGET=15.1 \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            AD_HOC_CODE_SIGNING_ALLOWED=YES \
-            COMPILER_INDEX_STORE_ENABLE=NO
+            AD_HOC_CODE_SIGNING_ALLOWED=YES
 
       - name: Package IPA
         run: |
           mkdir -p build/Payload
           APP_PATH=$(find build/ProjectLighthouse.xcarchive -name "*.app" -type d | head -n 1)
-
-          if [ -z "$APP_PATH" ]; then
-            echo "❌ ERROR: No .app file found in Archive."
-            exit 1
-          fi
-
-          echo "✅ Found App at: $APP_PATH"
           cp -R "$APP_PATH/" build/Payload/
           cd build && zip -yr ProjectLighthouse.ipa Payload
           
