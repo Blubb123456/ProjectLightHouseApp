@@ -93,7 +93,61 @@ jobs:
             echo "Patching HermesExecutorFactory.cpp..."
             sed -i '' 's/return delegate/return this->delegate/g' "$FILE"
           fi
-    
+
+      - name: Surgical Podfile Fix & Cache Clear
+        run: |
+          # 1. Clear the cache at the start of the step
+          rm -rf ~/Library/Developer/Xcode/DerivedData/ModuleCache.noindex
+          
+          cd ios
+          # 2. Quoted 'EOF' prevents the shell from seeing '(' as a syntax error
+          python3 << 'EOF'
+          import re
+          import os
+
+          file_path = 'Podfile'
+          if not os.path.exists(file_path):
+              print("Podfile not found, skipping...")
+              exit(0)
+
+          with open(file_path, 'r') as f:
+              content = f.read()
+
+          # Force the platform to 15.1
+          content = re.sub(r"platform :ios, .*", "platform :ios, '15.1'", content)
+
+          # This is the Ruby logic that gets injected. 
+          # It fixes the Exit Code 65 by silencing the module validator.
+          fix_logic = """
+            react_native_post_install(installer)
+            installer.pods_project.targets.each do |target|
+              target.build_configurations.each do |config|
+                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+                config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+                config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+                
+                # These flags kill the 'builtin-Swift-Compilation' error in Xcode 16
+                config.build_settings['OTHER_SWIFT_FLAGS'] = [
+                  '$(inherited)', 
+                  '-no-verify-emitted-module-interface',
+                  '-Xfrontend', '-disable-modules-validate-system-headers'
+                ]
+              end
+            end
+          """
+
+          # Replace the existing post_install block or append if missing
+          if 'post_install do |installer|' in content:
+              pattern = r'post_install do \|installer\|.*?end'
+              content = re.sub(pattern, f"post_install do |installer|{fix_logic}end", content, flags=re.DOTALL)
+          else:
+              content += f"\npost_install do |installer|{fix_logic}end\n"
+
+          with open(file_path, 'w') as f:
+              f.write(content)
+          print("✅ Podfile patched successfully.")
+          EOF
+      
       - name: Install Pods
         run: |
           cd ios
@@ -115,59 +169,7 @@ jobs:
           mkdir -p scripts/xcode
           cp ../node_modules/react-native/scripts/xcode/with-environment.sh scripts/xcode/ || true
       
-      - name: Force Swift Module Compatibility
-        run: |
-          rm -rf ~/Library/Developer/Xcode/DerivedData/ModuleCache.noindex
-          cd ios
-          python3 << 'EOF'
-          import re
-          import os
-
-          with open('Podfile', 'r') as f:
-              content = f.read()
-
-          # Ensure the platform is strictly 15.1
-          content = re.sub(r"platform :ios, .*", "platform :ios, '15.1'", content)
-
-          ruby_logic = """
-            react_native_post_install(installer)
-            installer.pods_project.targets.each do |target|
-              target.build_configurations.each do |config|
-                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-                
-                # SLEDGEHAMMER: This stops the validation error in your log
-                config.build_settings['OTHER_SWIFT_FLAGS'] = [
-                  '$(inherited)', 
-                  '-no-verify-emitted-module-interface',
-                  '-Xfrontend', '-disable-modules-validate-system-headers'
-                ]
-                
-                # Fix for Xcode 16 sandbox
-                config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-                config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
-              end
-            end
-          """
-
-          if 'post_install do |installer|' in content:
-              pattern = r'post_install do \|installer\|.*?end'
-              content = re.sub(pattern, f"post_install do |installer|{ruby_logic}end", content, flags=re.DOTALL)
-          
-          with open('Podfile', 'w') as f:
-              f.write(content)
-          EOF
-
-          # Replace the existing post_install block or append if missing
-          if 'post_install do |installer|' in content:
-              pattern = r'post_install do \|installer\|.*?end'
-              content = re.sub(pattern, f"post_install do |installer|{fix_logic}end", content, flags=re.DOTALL)
-          else:
-              content += f"\npost_install do |installer|{fix_logic}end\n"
-
-          with open('Podfile', 'w') as f:
-              f.write(content)
-          print("✅ Podfile patched for iOS 15.1 and Xcode 16.")
-          EOF
+      
       
       - name: Bulletproof Patch for Hermes Executor
         run: |
