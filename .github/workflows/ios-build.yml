@@ -85,7 +85,7 @@ jobs:
          # EOF
           
           #pod install --repo-update
-      - name: Patch Podfile for iOS 15.4
+      - name: Nuclear Patch Podfile for iOS 15.1
         run: |
           cd ios
           echo "export NODE_BINARY=$(command -v node)" > .xcode.env
@@ -96,20 +96,27 @@ jobs:
           with open('Podfile', 'r') as f:
               content = f.read()
 
-          # 1. Force the platform to 15.4
-          content = re.sub(r'platform :ios, .*', 'platform :ios, \"15.4\"', content)
+          # 1. Force everything to 15.1 (The stable floor for iOS 15 builds)
+          content = re.sub(r'platform :ios, .*', 'platform :ios, \"15.1\"', content)
 
-          # 2. Inject the target and modular header fix into the post_install block
-          # We insert it right at the start of the block
-          if 'post_install do |installer|' in content:
-              patch = \"\"\"post_install do |installer|
+          # 2. Inject the fix block into the start of post_install
+          fix_block = \"\"\"post_install do |installer|
             installer.pods_project.targets.each do |target|
               target.build_configurations.each do |config|
-                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.4'
+                # Force version and disable Swift 6 strictness
+                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+                config.build_settings['SWIFT_STRICT_CONCURRENCY'] = 'minimal'
+                
+                # Fix for ExpoModulesCore / Swift Concurrency back-deployment
+                config.build_settings['LIBRARY_SEARCH_PATHS'] = ['$(inherited)', '$(TOOLCHAIN_DIR)/usr/lib/swift/iphoneos', '$(TOOLCHAIN_DIR)/usr/lib/swift-5.0/iphoneos']
+                
+                # Allow non-modular headers (crucial for React-Core / Expo interaction)
                 config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
               end
             end\"\"\"
-              content = content.replace('post_install do |installer|', patch)
+          
+          if 'post_install do |installer|' in content:
+              content = content.replace('post_install do |installer|', fix_block)
 
           with open('Podfile', 'w') as f:
               f.write(content)
@@ -146,6 +153,7 @@ jobs:
           # CLANG_ENABLE_EXPLICIT_MODULES=NO fixes the 'PrecompileModule' scan crashes
           # COMPILER_INDEX_STORE_ENABLE=NO speeds up the runner and prevents I/O timeouts
           set -o pipefail
+          rm -rf ~/Library/Developer/Xcode/DerivedData/
           xcodebuild archive \
             -workspace "$WORKSPACE_PATH" \
             -scheme "$SCHEME_NAME" \
@@ -155,7 +163,7 @@ jobs:
             -parallelizeTargets=NO \
             SWIFT_TREAT_WARNINGS_AS_ERRORS=NO \
             -jobs 1 \
-            IPHONEOS_DEPLOYMENT_TARGET=15.4 \
+            IPHONEOS_DEPLOYMENT_TARGET=15.1 \
             GCC_TREAT_WARNINGS_AS_ERRORS=NO \
             CLANG_ENABLE_EXPLICIT_MODULES=NO \
             CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES=YES \
@@ -165,7 +173,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            | tee xcodebuild.log
+            | grep -v "Disabling previews" | tee xcodebuild.log
 
       - name: Package IPA
         run: |
