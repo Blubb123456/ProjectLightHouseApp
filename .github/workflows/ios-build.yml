@@ -85,28 +85,32 @@ jobs:
          # EOF
           
           #pod install --repo-update
-      - name: Patch Podfile for iOS 15.1
+      - name: Patch Podfile for iOS 15.4
         run: |
           cd ios
           echo "export NODE_BINARY=$(command -v node)" > .xcode.env
           echo "export NODE_BINARY=$(command -v node)" > .xcode.env.local
           
-          # Use Python to safely inject the logic without mangling line breaks
           python3 -c "
-          import sys
-          content = open('Podfile').read()
-          # 1. Update the platform line
           import re
-          content = re.sub(r'platform :ios, .*', 'platform :ios, \"15.1\"', content)
-          # 2. Inject the target override logic correctly
-          patch = \"\"\"
+          with open('Podfile', 'r') as f:
+              content = f.read()
+
+          # 1. Force the platform to 15.4
+          content = re.sub(r'platform :ios, .*', 'platform :ios, \"15.4\"', content)
+
+          # 2. Inject the target and modular header fix into the post_install block
+          # We insert it right at the start of the block
+          if 'post_install do |installer|' in content:
+              patch = \"\"\"post_install do |installer|
             installer.pods_project.targets.each do |target|
               target.build_configurations.each do |config|
-                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.4'
+                config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
               end
-            end
-            react_native_post_install\"\"\"
-          content = content.replace('react_native_post_install', patch)
+            end\"\"\"
+              content = content.replace('post_install do |installer|', patch)
+
           with open('Podfile', 'w') as f:
               f.write(content)
           "
@@ -154,6 +158,8 @@ jobs:
             IPHONEOS_DEPLOYMENT_TARGET=15.1 \
             GCC_TREAT_WARNINGS_AS_ERRORS=NO \
             CLANG_ENABLE_EXPLICIT_MODULES=NO \
+            CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES=YES \
+            SKIP_INSTALL=NO \
             COMPILER_INDEX_STORE_ENABLE=NO \
             OTHER_SWIFT_FLAGS="-no-warnings-as-errors" \
             CODE_SIGNING_ALLOWED=NO \
