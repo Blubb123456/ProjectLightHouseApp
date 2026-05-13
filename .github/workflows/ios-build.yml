@@ -131,7 +131,14 @@ jobs:
           with open('Podfile', 'w') as f:
               f.write(content)
           "
-      
+      - name: Patch Hermes for Xcode 16
+        run: |
+          FILE="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
+          if [ -f "$FILE" ]; then
+            echo "Patching HermesExecutorFactory.cpp..."
+            sed -i '' 's/return delegate/return this->delegate/g' "$FILE"
+          fi
+    
       - name: Install Pods
         run: |
           cd ios
@@ -153,7 +160,7 @@ jobs:
           mkdir -p scripts/xcode
           cp ../node_modules/react-native/scripts/xcode/with-environment.sh scripts/xcode/ || true
       
-      - name: Fix Podfile Syntax & Set C++20
+      - name: Fix Podfile Syntax & Set Xcode 16 Compatibility
         run: |
           cd ios
           python3 -c "
@@ -163,9 +170,11 @@ jobs:
           with open('Podfile', 'r') as f:
               content = f.read()
 
-          # Set platform to 15.1 and C++ standard to C++20
+          # 1. Ensure the platform is set to 15.1
           content = re.sub(r'platform :ios, .*', 'platform :ios, \"15.1\"', content)
 
+          # 2. Define the refined post_install logic
+          # We include the Swift verification bypass and the ExpoModulesCore precompile fix
           fix_logic = \"\"\"
             react_native_post_install(installer)
             installer.pods_project.targets.each do |target|
@@ -173,13 +182,24 @@ jobs:
                 config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
                 config.build_settings['SWIFT_STRICT_CONCURRENCY'] = 'minimal'
                 config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++20'
-                config.build_settings['LIBRARY_SEARCH_PATHS'] = ['$(inherited)', '$(TOOLCHAIN_DIR)/usr/lib/swift/iphoneos', '$(TOOLCHAIN_DIR)/usr/lib/swift-5.0/iphoneos']
+                # Fix for Xcode 16 Swift Module interface failures
+                config.build_settings['OTHER_SWIFT_FLAGS'] = '$(inherited) -no-verify-emitted-module-interface'
                 config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+                config.build_settings['LIBRARY_SEARCH_PATHS'] = ['$(inherited)', '$(TOOLCHAIN_DIR)/usr/lib/swift/iphoneos', '$(TOOLCHAIN_DIR)/usr/lib/swift-5.0/iphoneos']
+              end
+              
+              # Specific bypass for ExpoModulesCore bridging header issues in Xcode 16
+              if target.name == 'ExpoModulesCore'
+                target.build_configurations.each do |config|
+                  config.build_settings['SWIFT_PRECOMPILE_BRIDGING_HEADER'] = 'NO'
+                end
               end
             end
           \"\"\"
 
+          # 3. Inject the logic into the post_install block
           if 'post_install do |installer|' in content:
+              # This regex finds the post_install block and replaces its internal content
               pattern = r'(post_install do \|installer\|)(.*?)(\n  end)'
               content = re.sub(pattern, r'\\1' + fix_logic + r'\\3', content, flags=re.DOTALL)
           
