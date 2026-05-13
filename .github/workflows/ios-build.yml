@@ -187,23 +187,28 @@ jobs:
               f.write(content)
           "
       
-      - name: Patch Hermes Namespace and Type Mismatch
+      - name: Patch Hermes Executor Factory
         run: |
           FILE_PATH="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
           if [ -f "$FILE_PATH" ]; then
-            # Clean up previous attempts
+            # 1. Reset file to clean state
             git checkout "$FILE_PATH" || true
             
-            # 1. Remove the anonymous namespace start/end around DecoratedRuntime
-            # This fixes the 'static_cast' / '__compressed_pair' inheritance error
-            sed -i '' 's/namespace {/namespace facebook::react { \/\/ Patched for Xcode 16/g' "$FILE_PATH"
-            # Note: We keep the closing brace as is, as it now closes the react namespace
+            # 2. Add missing <thread> include that Xcode 16 / C++20 strictly requires
+            # Some headers no longer include it transitively
+            sed -i '' '1i\
+            #include <thread>
+            ' "$FILE_PATH"
+
+            # 3. Comment out the anonymous namespace start/end specifically for DecoratedRuntime
+            # This allows the memory allocator to see the class definition
+            sed -i '' 's/^namespace {/\/* namespace { \*\//g' "$FILE_PATH"
+            sed -i '' 's/^} \/\/ namespace/ \/* } \/\/ namespace \*\/ /g' "$FILE_PATH"
             
-            # 2. Fix the pointer cast we identified earlier
-            # We use a more direct approach: replacing the specific make_unique call
+            # 4. Apply the pointer cast fix for the make_unique call
             sed -i '' 's/return std::make_unique<HermesExecutor>(decoratedRuntime,/return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(decoratedRuntime),/g' "$FILE_PATH"
             
-            echo "Successfully patched Hermes namespace and pointer types."
+            echo "Successfully applied surgical patch to HermesExecutorFactory.cpp"
           else
             echo "File not found, skipping."
           fi
