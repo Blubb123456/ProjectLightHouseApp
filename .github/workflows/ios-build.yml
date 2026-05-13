@@ -94,66 +94,9 @@ jobs:
             sed -i '' 's/return delegate/return this->delegate/g' "$FILE"
           fi
 
-      - name: Force Swift Compatibility & Clear Cache
-        run: |
-          # 1. Kill the poisoned cache immediately
-          rm -rf ~/Library/Developer/Xcode/DerivedData/ModuleCache.noindex
-          
-          cd ios
-          # 2. 'EOF' in quotes tells Bash: "Do not touch/interpret anything inside here"
-          python3 << 'EOF'
-          import re
-          import os
-
-          path = 'Podfile'
-          if not os.path.exists(path):
-              print("No Podfile found.")
-              exit(0)
-
-          with open(path, 'r') as f:
-              content = f.read()
-
-          # Force target to 15.1 to match your build command
-          content = re.sub(r"platform :ios, .*", "platform :ios, '15.1'", content)
-
-          # This Ruby logic shuts down the strict module validation causing the error
-          fix_logic = """
-            react_native_post_install(installer)
-            installer.pods_project.targets.each do |target|
-              target.build_configurations.each do |config|
-                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
-                config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-                config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
-                
-                # THE KILLER FLAGS: This stops the validation that failed in your log
-                config.build_settings['OTHER_SWIFT_FLAGS'] = [
-                  '$(inherited)', 
-                  '-no-verify-emitted-module-interface',
-                  '-Xfrontend', '-disable-modules-validate-system-headers'
-                ]
-              end
-            end
-          """
-
-          if 'post_install do |installer|' in content:
-              # Replace the existing block entirely
-              pattern = r'post_install do \|installer\|.*?end'
-              content = re.sub(pattern, f"post_install do |installer|{fix_logic}end", content, flags=re.DOTALL)
-          else:
-              content += f"\npost_install do |installer|{fix_logic}end\n"
-
-          with open(path, 'w') as f:
-              f.write(content)
-          print("✅ Podfile patched for Xcode 16 module compatibility.")
-          EOF
       
-      - name: Install Pods
-        run: |
-          cd ios
-          rm -rf Pods
-          rm -rf Podfile.lock
-          # This flag is the key to finding missing Expo specs
-          pod install --repo-update
+      
+      
       - name: Manual JS Bundle
         run: |
           npx expo export:embed --platform ios --dev false --bundle-output ios/main.jsbundle --assets-dest ios
@@ -206,42 +149,68 @@ jobs:
           node patch-hermes.js
           rm patch-hermes.js
           
-      - name: Build Unsigned Archive
+      - name: Hard-Reset Podfile and Build
         run: |
-          # 1. Discovery (same as before)
-          WORKSPACE_PATH=$(find ios -name "*.xcworkspace" -maxdepth 2 | head -n 1)
-          SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
+          # 1. KILL ALL CACHES - Clean slate for Attempt 401
+          rm -rf ~/Library/Developer/Xcode/DerivedData
+          rm -rf ios/Pods
+          rm -rf ios/Podfile.lock
 
-          # 2. The "Stability" Build
-          # CLANG_ENABLE_EXPLICIT_MODULES=NO fixes the 'PrecompileModule' scan crashes
-          # COMPILER_INDEX_STORE_ENABLE=NO speeds up the runner and prevents I/O timeouts
-          set -o pipefail
-          rm -rf ~/Library/Developer/Xcode/DerivedData/
+          # 2. OVERWRITE PODFILE - Using 'cat' to avoid Python syntax errors
+          cat << 'EOF' > ios/Podfile
+          platform :ios, '15.1'
+          
+          target 'ProjectLightHouseReactApp' do
+            config = use_native_modules!
+            use_react_native!(
+              :path => config[:reactNativePath],
+              :hermes_enabled => true
+            )
+
+            post_install do |installer|
+              react_native_post_install(installer)
+              installer.pods_project.targets.each do |target|
+                target.build_configurations.each do |config|
+                  # Force the environment to recognize 15.1
+                  config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+                  config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+                  config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
+                  
+                  # SILENCE THE COMPILER: This stops the Exit Code 65 Swift errors
+                  config.build_settings['OTHER_SWIFT_FLAGS'] = [
+                    '$(inherited)', 
+                    '-no-verify-emitted-module-interface',
+                    '-Xfrontend', 
+                    '-disable-modules-validate-system-headers'
+                  ]
+                end
+              end
+            end
+          end
+          EOF
+
+          # 3. FRESH INSTALL
+          cd ios
+          pod install --repo-update
+          
+          # 4. THE BUILD COMMAND - All flags included here as a backup
+          cd ..
           xcodebuild archive \
-            -workspace "$WORKSPACE_PATH" \
-            -scheme "$SCHEME_NAME" \
+            -workspace ios/ProjectLightHouseReactApp.xcworkspace \
+            -scheme ProjectLightHouseReactApp \
             -configuration Release \
             -archivePath $(pwd)/build/ProjectLighthouse.xcarchive \
             -destination "generic/platform=iOS" \
             -parallelizeTargets=NO \
-            SWIFT_TREAT_WARNINGS_AS_ERRORS=NO \
-            -jobs 1 \
-            ENABLE_USER_SCRIPT_SANDBOXING=NO \
-            SWIFT_STRICT_CONCURRENCY=minimal \
-            CLANG_CXX_LANGUAGE_STANDARD="gnu++20" \
-            OTHER_CPLUSPLUSFLAGS="-std=gnu++20" \
             IPHONEOS_DEPLOYMENT_TARGET=15.1 \
-            OTHER_SWIFT_FLAGS="$(inherited) -no-verify-emitted-module-interface -Xfrontend -disable-modules-validate-system-headers" \
-            GCC_TREAT_WARNINGS_AS_ERRORS=NO \
-            CLANG_ENABLE_EXPLICIT_MODULES=NO \
+            ENABLE_USER_SCRIPT_SANDBOXING=NO \
             CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES=YES \
-            SKIP_INSTALL=NO \
-            COMPILER_INDEX_STORE_ENABLE=NO \
-            OTHER_SWIFT_FLAGS="-no-warnings-as-errors" \
+            OTHER_SWIFT_FLAGS="\$(inherited) -no-verify-emitted-module-interface -Xfrontend -disable-modules-validate-system-headers" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            | grep -v "Disabling previews" | tee xcodebuild.log
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            COMPILER_INDEX_STORE_ENABLE=NO
 
       - name: Package IPA
         run: |
