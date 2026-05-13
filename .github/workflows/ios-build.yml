@@ -149,67 +149,60 @@ jobs:
           node patch-hermes.js
           rm patch-hermes.js
           
-      - name: Dynamic Podfile Reset and Build
+      - name: Restore and Patch Original Podfile
         run: |
-          # 1. KILL CACHES
+          # 1. Restore your original Podfile (wipes away the broken generated one)
+          git checkout ios/Podfile || git restore ios/Podfile || true
+          
+          # 2. Kill the caches
           rm -rf ~/Library/Developer/Xcode/DerivedData
           rm -rf ios/Pods
           rm -rf ios/Podfile.lock
 
-          # 2. LOCATE SCRIPTS DYNAMICALLY
-          # We find the absolute paths so 'require' cannot fail
-          RN_PODS_PATH=$(find . -name "react_native_pods.rb" | head -n 1)
-          NATIVE_MODULES_PATH=$(find . -name "native_modules.rb" | grep "cli-platform-ios" | head -n 1)
-          
-          echo "Found RN Pods at: $RN_PODS_PATH"
-          echo "Found Native Modules at: $NATIVE_MODULES_PATH"
-
-          # 3. OVERWRITE PODFILE WITH ABSOLUTE PATHS
-          cat << EOF > ios/Podfile
-          require '$PWD/$RN_PODS_PATH'
-          require '$PWD/$NATIVE_MODULES_PATH'
-
-          platform :ios, '15.1'
-          
-          target 'ProjectLightHouseReactApp' do
-            config = use_native_modules!
-            use_react_native!(
-              :path => config[:reactNativePath],
-              :hermes_enabled => true
-            )
-
-            post_install do |installer|
-              react_native_post_install(installer)
+          # 3. Safely inject the Swift flags using Ruby
+          cd ios
+          ruby -e "
+            path = 'Podfile'
+            content = File.read(path)
+            
+            # The exact flags needed to stop Xcode 16 from failing the build
+            fix = %q{
               installer.pods_project.targets.each do |target|
                 target.build_configurations.each do |config|
+                  config.build_settings['OTHER_SWIFT_FLAGS'] = ['$(inherited)', '-no-verify-emitted-module-interface', '-Xfrontend', '-disable-modules-validate-system-headers']
                   config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
                   config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-                  config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
-                  
-                  # Flags to bypass the Xcode 16 Swift module validation (Exit Code 65)
-                  config.build_settings['OTHER_SWIFT_FLAGS'] = [
-                    '\$(inherited)', 
-                    '-no-verify-emitted-module-interface',
-                    '-Xfrontend', 
-                    '-disable-modules-validate-system-headers'
-                  ]
                 end
               end
+            }
+            
+            # Find the existing post_install hook and inject the fix directly beneath it
+            if content.include?('react_native_post_install(installer)')
+              content.gsub!('react_native_post_install(installer)', %Q{react_native_post_install(installer)\n#{fix}})
+            elsif content.include?('post_install do |installer|')
+              content.gsub!('post_install do |installer|', %Q{post_install do |installer|\n#{fix}})
             end
-          end
-          EOF
+            
+            # Force the global platform target to 15.1
+            content.gsub!(/platform :ios, .*/, %q{platform :ios, '15.1'})
+            
+            File.write(path, content)
+            puts '✅ Original Podfile successfully patched.'
+          "
 
-          # 4. FRESH INSTALL
-          cd ios
+          # 4. Clean Install
           pod install --repo-update
+
+      - name: Build Unsigned Archive
+        run: |
+          WORKSPACE_PATH=$(find ios -name "*.xcworkspace" -maxdepth 2 | head -n 1)
+          SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
           
-          # 5. THE BUILD COMMAND
-          cd ..
           xcodebuild archive \
-            -workspace ios/ProjectLightHouseReactApp.xcworkspace \
-            -scheme ProjectLightHouseReactApp \
+            -workspace "$WORKSPACE_PATH" \
+            -scheme "$SCHEME_NAME" \
             -configuration Release \
-            -archivePath \$(pwd)/build/ProjectLighthouse.xcarchive \
+            -archivePath $(pwd)/build/ProjectLighthouse.xcarchive \
             -destination "generic/platform=iOS" \
             -parallelizeTargets=NO \
             IPHONEOS_DEPLOYMENT_TARGET=15.1 \
