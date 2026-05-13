@@ -187,30 +187,33 @@ jobs:
               f.write(content)
           "
       
-      - name: Patch Hermes Executor Factory
+      - name: Surgical Patch for Hermes Executor
         run: |
           FILE_PATH="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
           if [ -f "$FILE_PATH" ]; then
-            # 1. Reset file to clean state
+            # 1. Reset file
             git checkout "$FILE_PATH" || true
             
-            # 2. Add missing <thread> include that Xcode 16 / C++20 strictly requires
-            # Some headers no longer include it transitively
+            # 2. Add <thread> include
             sed -i '' '1i\
             #include <thread>
             ' "$FILE_PATH"
 
-            # 3. Comment out the anonymous namespace start/end specifically for DecoratedRuntime
-            # This allows the memory allocator to see the class definition
-            sed -i '' 's/^namespace {/\/* namespace { \*\//g' "$FILE_PATH"
-            sed -i '' 's/^} \/\/ namespace/ \/* } \/\/ namespace \*\/ /g' "$FILE_PATH"
+            # 3. Comment out ONLY the anonymous namespace (usually around lines 100-260)
+            # We target the specific "namespace {" that isn't the main facebook::react one.
+            # In this file, the anonymous namespace starts after the initial includes.
+            sed -i '' 's/^namespace {/\/* namespace { \*\//' "$FILE_PATH"
             
-            # 4. Apply the pointer cast fix for the make_unique call
+            # 4. Target the specific closing brace for the anonymous namespace.
+            # It is typically followed by "HermesExecutorFactory::" or similar logic.
+            sed -i '' 's/^} \/\/ namespace/ \/* } \/\/ namespace \*\/ /' "$FILE_PATH"
+            
+            # 5. Fix the pointer cast mismatch
             sed -i '' 's/return std::make_unique<HermesExecutor>(decoratedRuntime,/return std::make_unique<HermesExecutor>(std::static_pointer_cast<facebook::jsi::Runtime>(decoratedRuntime),/g' "$FILE_PATH"
             
-            echo "Successfully applied surgical patch to HermesExecutorFactory.cpp"
+            echo "Surgical patch applied."
           else
-            echo "File not found, skipping."
+            echo "HermesExecutorFactory.cpp not found."
           fi
           
       - name: Build Unsigned Archive
