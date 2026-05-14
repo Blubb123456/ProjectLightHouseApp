@@ -48,11 +48,18 @@ jobs:
           fix_logic = %q{
               installer.pods_project.targets.each do |target|
                 target.build_configurations.each do |config|
+                  # Fix Gun 1: Permissions/Sandboxing (Hermes Script Fix)
+                  config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+                  
+                  # Fix Gun 2: Skip the Simulator SDK check during Asset compilation
+                  config.build_settings['ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOLS'] = 'NO'
+                  
+                  # Standard Xcode 16 Modularity fixes
                   config.build_settings['CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES'] = 'YES'
                   config.build_settings['WERROR_NON_MODULAR_INCLUDE_IN_FRAMEWORK_MODULE'] = 'NO'
-                  config.build_settings['SWIFT_OPTIMIZATION_LEVEL'] = '-Onone'
-                  config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
-                  config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+                  
+                  # Ensure architecture is strictly ARM64 for the real-device archive
+                  config.build_settings['SDKROOT'] = 'iphoneos'
                 end
               end
           }
@@ -60,7 +67,7 @@ jobs:
           if content.include?('post_install do |installer|')
             content.gsub!('post_install do |installer|', \"post_install do |installer|\\n#{fix_logic}\")
             File.write(path, content)
-            puts '✅ Podfile patched correctly.'
+            puts '✅ Podfile patched with Sledgehammer fixes.'
           else
             puts '❌ Could not find post_install block.'
             exit 1
@@ -87,7 +94,8 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            SKIP_INSTALL=NO \
+            SKIP_INSTALL=NO \ 
+            ARCHS=arm64 \
             AD_HOC_CODE_SIGNING_ALLOWED=YES
 
       - name: Export IPA
