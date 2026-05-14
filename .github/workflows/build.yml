@@ -24,8 +24,10 @@ jobs:
 
       - name: Install Expo & dependencies
         run: |
-          npm install -g expo
-          npm ci
+          # Force an install to sync the lockfile on the runner
+          npm install
+          # Install the dev client specifically for this build
+          npx expo install expo-dev-client
 
       - name: Add expo-dev-client
         run: npx expo install expo-dev-client
