@@ -35,7 +35,7 @@ jobs:
           npx expo prebuild --platform ios --clean
           cd ios
           pod install
-          config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
+         
       
       - name: Read app name from package.json
         id: appname
