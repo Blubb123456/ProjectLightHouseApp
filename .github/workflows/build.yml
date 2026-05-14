@@ -35,7 +35,7 @@ jobs:
           npx expo prebuild --platform ios --clean
           cd ios
           pod install
-         
+          config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.1'
       
       - name: Read app name from package.json
         id: appname
@@ -46,9 +46,10 @@ jobs:
       
       - name: Build iOS archive (unsigned)
         run: |
+          WORKSPACE_PATH=$(find ios -name "*.xcworkspace" | head -n 1)
           xcodebuild \
             -workspace ios/${{ env.APP_NAME }}.xcworkspace \
-            -scheme ${{ env.APP_NAME }} \
+            -scheme "${{ env.APP_NAME }}" \
             -configuration Debug clean archive \
             -sdk iphoneos \
             -archivePath build/${{ env.APP_NAME }}.xcarchive \
