@@ -26,12 +26,6 @@
     "react-native-fs": "^2.20.0",
     "react-native-web": "^0.21.0"
   },
-  "resolutions": {
-  "expo-modules-core": "1.12.26"
-},
-"overrides": {
-  "expo-modules-core": "1.12.26"
-},
   "private": true,
   "devDependencies": {
     "@react-native-community/cli": "^20.1.3"
