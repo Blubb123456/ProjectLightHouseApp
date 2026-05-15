@@ -18,13 +18,13 @@ jobs:
 
       - name: Install and Validate Dependencies
         run: |
-          # 1. Install using legacy-peer-deps to bypass strict lockfile blocks
+          # 1. Base install bypasses strict lockfiles
           npm install --legacy-peer-deps
           
-          # 2. Install the dev client
-          npx expo install expo-dev-client --legacy-peer-deps
+          # 2. Corrected argument forwarding for the dev client
+          npx expo install expo-dev-client -- --legacy-peer-deps
           
-          # 3. THE MAGIC FIX: Force Expo to automatically sync all mismatched child modules
+          # 3. Let Expo sync the core modules safely
           npx expo install --check
       
       - name: Prebuild
