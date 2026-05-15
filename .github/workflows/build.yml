@@ -16,13 +16,16 @@ jobs:
           node-version: 20
          
 
-      - name: Install and Fix Dependencies
+      - name: Install and Validate Dependencies
         run: |
-          # Force an install to sync the lockfile on the runner
-          npm install
-          # Install the dev client specifically for this build
-          npx expo install expo-dev-client
-          npm dedupe
+          # 1. Install using legacy-peer-deps to bypass strict lockfile blocks
+          npm install --legacy-peer-deps
+          
+          # 2. Install the dev client
+          npx expo install expo-dev-client --legacy-peer-deps
+          
+          # 3. THE MAGIC FIX: Force Expo to automatically sync all mismatched child modules
+          npx expo install --check
       
       - name: Prebuild
         run: npx expo prebuild --platform ios --clean
