@@ -75,7 +75,10 @@ jobs:
             -scheme ProjectLightHouseReactApp \
             -configuration Debug \
             -destination "generic/platform=iOS" \
-            -archivePath build/App.xcarchive
+            -archivePath build/App.xcarchive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
             
       - name: Package IPA
         run: |
