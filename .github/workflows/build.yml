@@ -18,14 +18,17 @@ jobs:
 
       - name: Install and Validate Dependencies
         run: |
-          # 1. Base install bypasses strict lockfiles
-          npm install --legacy-peer-deps
+          # Force legacy-peer-deps globally for ALL nested npm/expo operations
+          export npm_config_legacy_peer_deps=true
           
-          # 2. Corrected argument forwarding for the dev client
-          npx expo install expo-dev-client -- --legacy-peer-deps
+          # 1. Base dependency install
+          npm install
           
-          # 3. Let Expo sync the core modules safely
-          npx expo install --check
+          # 2. Native dev client install
+          npx expo install expo-dev-client
+          
+          # 3. FORCE the automatic alignment of the broken core modules
+          npx expo install --fix
       
       - name: Prebuild
         run: npx expo prebuild --platform ios --clean
