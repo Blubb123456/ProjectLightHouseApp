@@ -22,6 +22,7 @@ jobs:
           npm install
           # Install the dev client specifically for this build
           npx expo install expo-dev-client
+          npm dedupe
       
       - name: Prebuild
         run: npx expo prebuild --platform ios --clean
