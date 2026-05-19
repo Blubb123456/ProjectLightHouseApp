@@ -68,34 +68,45 @@ jobs:
             exit 1
           end
           "
-      - name: Overwrite Hermes Source (Type Cast Fix)
+      - name: Overwrite Hermes Source (Macro Injection)
         run: |
           FILE="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
           if [ -f "$FILE" ]; then
             python3 -c "
-          import re, os
+          import os
           path = '$FILE'
           with open(path, 'r') as f:
               content = f.read()
 
-          # 1. Add missing headers if not present
+          # If we haven't patched it yet, inject clean headers and macros at the top
           if '#include <thread>' not in content:
-              content = '#include <thread>\n#include <atomic>\n' + content
+              macro_patch = (
+                  '#include <thread>\n'
+                  '#include <atomic>\n'
+                  '#include <memory>\n'
+                  '// Fix Xcode 16+ std::make_shared private inheritance restriction\n'
+                  'namespace std {\n'
+                  '  template<typename... Args>\n'
+                  '  std::shared_ptr<facebook::react::(anonymous namespace)::DecoratedRuntime>\n'
+                  '  make_shared(Args&&... args) {\n'
+                  '      return std::shared_ptr<facebook::react::(anonymous namespace)::DecoratedRuntime>(\n'
+                  '          new facebook::react::(anonymous namespace)::DecoratedRuntime(std::forward<Args>(args)...)\n'
+                  '      );\n'
+                  '  }\n'
+                  '}\n'
+              )
+              content = macro_patch + content
 
-          # 2. Fix the thread ID ambiguity by using auto
+          # Resolve the 'expected' vs folly::Expected variable naming collision using auto
           content = content.replace('std::thread::id expected', 'auto expected')
 
-          # 3. Fix the shared_ptr constructor
-          content = re.sub(r'std::make_shared<DecoratedRuntime>\(', 
-                           r'std::shared_ptr<DecoratedRuntime>(new DecoratedRuntime(', content)
-
-          # 4. Fix the HermesExecutor constructor cast safely by targeting the exact parameter line
+          # Fix the unique_ptr upcast mismatch seamlessly
           content = content.replace('    runtime,', '    std::static_pointer_cast<facebook::jsi::Runtime>(runtime),')
 
           with open(path, 'w') as f:
               f.write(content)
           "
-            echo "✅ Source patched with explicit pointer upcasting."
+            echo "✅ Source patched cleanly via C++ template specialization injection."
           fi
           
       - name: Set App Name Env
