@@ -28,6 +28,9 @@
       },
       "package": "com.jmb10.ProjectLightHouseReactApp"
     },
+    "packagerOpts": {
+  "config": "metro.config.js"
+    },
     "extra": {
       "eas": {
         "projectId": "8e70bcba-5878-4373-8088-14cf29429b38"
