@@ -68,7 +68,7 @@ jobs:
             exit 1
           end
           "
-      - name: Overwrite Hermes Source (Macro Injection)
+      - name: Overwrite Hermes Source (Surgical Inline Patch)
         run: |
           FILE="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
           if [ -f "$FILE" ]; then
@@ -78,35 +78,29 @@ jobs:
           with open(path, 'r') as f:
               content = f.read()
 
-          # If we haven't patched it yet, inject clean headers and macros at the top
-          if '#include <thread>' not in content:
-              macro_patch = (
-                  '#include <thread>\n'
-                  '#include <atomic>\n'
-                  '#include <memory>\n'
-                  '// Fix Xcode 16+ std::make_shared private inheritance restriction\n'
-                  'namespace std {\n'
-                  '  template<typename... Args>\n'
-                  '  std::shared_ptr<facebook::react::(anonymous namespace)::DecoratedRuntime>\n'
-                  '  make_shared(Args&&... args) {\n'
-                  '      return std::shared_ptr<facebook::react::(anonymous namespace)::DecoratedRuntime>(\n'
-                  '          new facebook::react::(anonymous namespace)::DecoratedRuntime(std::forward<Args>(args)...)\n'
-                  '      );\n'
-                  '  }\n'
-                  '}\n'
-              )
-              content = macro_patch + content
+          # 1. Inject an inline factory lambda inside createJSExecutor to bypass strict make_shared visibility rules
+          lambda_helper = '\n  auto make_decorated_runtime = [](auto&&... args) {\n      return std::shared_ptr<DecoratedRuntime>(new DecoratedRuntime(std::forward<decltype(args)>(args)...));\n  };\n'
+          if 'make_decorated_runtime' not in content:
+              content = content.replace('jsQueue) {', 'jsQueue) {' + lambda_helper)
 
-          # Resolve the 'expected' vs folly::Expected variable naming collision using auto
-          content = content.replace('std::thread::id expected', 'auto expected')
+          # 2. Safely route the make_shared token to use our local proxy factory
+          content = content.replace('std::make_shared<DecoratedRuntime>', 'make_decorated_runtime')
 
-          # Fix the unique_ptr upcast mismatch seamlessly
-          content = content.replace('    runtime,', '    std::static_pointer_cast<facebook::jsi::Runtime>(runtime),')
+          # 3. Rename the local 'expected' variable to 'expected_tid' to prevent type resolution collisions with folly::Expected
+          content = content.replace('std::thread::id expected =', 'std::thread::id expected_tid =')
+          content = content.replace('tid.compare_exchange_strong(expected,', 'tid.compare_exchange_strong(expected_tid,')
+          content = content.replace('else if (expected == this_id)', 'else if (expected_tid == this_id)')
+
+          # 4. Apply an explicit pointer upcast to guarantee type compatibility at instantiation
+          content = content.replace('    runtime,\n    delegate,', '    std::static_pointer_cast<facebook::jsi::Runtime>(runtime),\n    delegate,')
+          content = content.replace('    runtime, delegate,', '    std::static_pointer_cast<facebook::jsi::Runtime>(runtime), delegate,')
 
           with open(path, 'w') as f:
               f.write(content)
           "
-            echo "✅ Source patched cleanly via C++ template specialization injection."
+            echo "✅ Hermes source surgical inline patch applied successfully."
+          else
+            echo "❌ Target file not found!"
           fi
           
       - name: Set App Name Env
