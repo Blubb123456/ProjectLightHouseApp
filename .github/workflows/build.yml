@@ -77,15 +77,31 @@ jobs:
 
       - name: Build iOS archive (unsigned)
         run: |
+          rm -rf build/DerivedData
+          export REACT_NATIVE_PATH="$(pwd)/node_modules/react-native"
+          
+          # Force the React Native bundle script to run in asset mode
+          export FORCE_BUNDLING=true
+          export SKIP_BUNDLING=false
+          
           xcodebuild archive \
             -workspace ios/ProjectLightHouseReactApp.xcworkspace \
             -scheme ProjectLightHouseReactApp \
-            -configuration Debug \
-            -destination "generic/platform=iOS" \
-            -archivePath build/App.xcarchive \
+            -configuration Release \
+            -archivePath build/ProjectLighthouse.xcarchive \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/DerivedData \
+            -parallelizeTargets=NO \
+            -jobs 1 \
+            OTHER_CPLUSPLUSFLAGS="-Wno-error=non-modular-include-in-framework-module -Wno-error=return-type -Wno-error=reorder-ctor" \
+            REACT_NATIVE_PATH="$REACT_NATIVE_PATH" \
+            FORCE_BUNDLING=true \
+            USE_HEADERMAP=NO \
+            CLANG_ENABLE_MODULES=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY=""
+            clean archive
             
       - name: Package IPA
         run: |
