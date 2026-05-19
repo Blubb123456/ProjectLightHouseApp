@@ -68,7 +68,36 @@ jobs:
             exit 1
           end
           "
-      
+      - name: Overwrite Hermes Source (Type Cast Fix)
+        run: |
+          FILE="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
+          if [ -f "$FILE" ]; then
+            python3 -c "
+          import re, os
+          path = '$FILE'
+          with open(path, 'r') as f:
+              content = f.read()
+
+          # 1. Add missing headers if not present
+          if '#include <thread>' not in content:
+              content = '#include <thread>\n#include <atomic>\n' + content
+
+          # 2. Fix the thread ID ambiguity by using auto
+          content = content.replace('std::thread::id expected', 'auto expected')
+
+          # 3. Fix the shared_ptr constructor
+          content = re.sub(r'std::make_shared<DecoratedRuntime>\(', 
+                           r'std::shared_ptr<DecoratedRuntime>(new DecoratedRuntime(', content)
+
+          # 4. Fix the HermesExecutor constructor cast safely by targeting the exact parameter line
+          content = content.replace('    runtime,', '    std::static_pointer_cast<facebook::jsi::Runtime>(runtime),')
+
+          with open(path, 'w') as f:
+              f.write(content)
+          "
+            echo "✅ Source patched with explicit pointer upcasting."
+          fi
+          
       - name: Set App Name Env
         run: |
           # Get name from package.json, strip non-alphanumeric
