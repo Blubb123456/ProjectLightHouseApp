@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-13
+    runs-on: macos-15
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -68,77 +68,24 @@ jobs:
             exit 1
           end
           "
-      - name: Overwrite Hermes Source (Surgical Inline Patch)
-        run: |
-          FILE="node_modules/react-native/ReactCommon/hermes/executor/HermesExecutorFactory.cpp"
-          if [ -f "$FILE" ]; then
-            python3 -c "
-          import os
-          path = '$FILE'
-          with open(path, 'r') as f:
-              content = f.read()
-
-          # 1. Inject an inline factory lambda inside createJSExecutor to bypass strict make_shared visibility rules
-          lambda_helper = '\n  auto make_decorated_runtime = [](auto&&... args) {\n      return std::shared_ptr<DecoratedRuntime>(new DecoratedRuntime(std::forward<decltype(args)>(args)...));\n  };\n'
-          if 'make_decorated_runtime' not in content:
-              content = content.replace('jsQueue) {', 'jsQueue) {' + lambda_helper)
-
-          # 2. Safely route the make_shared token to use our local proxy factory
-          content = content.replace('std::make_shared<DecoratedRuntime>', 'make_decorated_runtime')
-
-          # 3. Rename the local 'expected' variable to 'expected_tid' to prevent type resolution collisions with folly::Expected
-          content = content.replace('std::thread::id expected =', 'std::thread::id expected_tid =')
-          content = content.replace('tid.compare_exchange_strong(expected,', 'tid.compare_exchange_strong(expected_tid,')
-          content = content.replace('else if (expected == this_id)', 'else if (expected_tid == this_id)')
-
-          # 4. Apply an explicit pointer upcast to guarantee type compatibility at instantiation
-          content = content.replace('    runtime,\n    delegate,', '    std::static_pointer_cast<facebook::jsi::Runtime>(runtime),\n    delegate,')
-          content = content.replace('    runtime, delegate,', '    std::static_pointer_cast<facebook::jsi::Runtime>(runtime), delegate,')
-
-          with open(path, 'w') as f:
-              f.write(content)
-          "
-            echo "✅ Hermes source surgical inline patch applied successfully."
-          else
-            echo "❌ Target file not found!"
-          fi
-          
+      
       - name: Set App Name Env
         run: |
           # Get name from package.json, strip non-alphanumeric
           NAME=$(jq -r .name package.json | tr -cd '[:alnum:]_')
           echo "APP_NAME=$NAME" >> $GITHUB_ENV
 
-      - name: Set Xcode Version
-        run: sudo xcode-select -s /Applications/Xcode_14.3.1.app/Contents/Developer
-  
       - name: Build iOS archive (unsigned)
         run: |
-          rm -rf build/DerivedData
-          export REACT_NATIVE_PATH="$(pwd)/node_modules/react-native"
-          
-          # Force the React Native bundle script to run in asset mode
-          export FORCE_BUNDLING=true
-          export SKIP_BUNDLING=false
-          
           xcodebuild archive \
             -workspace ios/ProjectLightHouseReactApp.xcworkspace \
             -scheme ProjectLightHouseReactApp \
-            -configuration Release \
-            -archivePath build/ProjectLighthouse.xcarchive \
-            -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            -derivedDataPath build/DerivedData \
-            -parallelizeTargets=NO \
-            -jobs 1 \
-            OTHER_CPLUSPLUSFLAGS="-Wno-error=non-modular-include-in-framework-module -Wno-error=return-type -Wno-error=reorder-ctor" \
-            REACT_NATIVE_PATH="$REACT_NATIVE_PATH" \
-            FORCE_BUNDLING=true \
-            USE_HEADERMAP=NO \
-            CLANG_ENABLE_MODULES=NO \
+            -configuration Debug \
+            -destination "generic/platform=iOS" \
+            -archivePath build/App.xcarchive \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            clean archive
+            CODE_SIGN_IDENTITY=""
             
       - name: Package IPA
         run: |
