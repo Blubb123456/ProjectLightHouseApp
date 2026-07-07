@@ -73,7 +73,7 @@ jobs:
             -workspace "$WORKSPACE_PATH" \
             -scheme "$SCHEME_NAME" \
             -configuration Release \
-            -archivePath $(pwd)/build/ProjectLighthouse.xcarchive \
+            -archivePath $(pwd)/build/LightHouse3.xcarchive \
             -destination "generic/platform=iOS" \
             CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES=YES \
             CODE_SIGNING_ALLOWED=NO \
