@@ -8,7 +8,7 @@
     "scheme": "lighthouse3",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon"
+      
     },
     "android": {
       "adaptiveIcon": {
@@ -26,7 +26,7 @@
     "plugins": [
       "expo-router",
       [
-        "expo-splash-screen",
+        
         {
           "backgroundColor": "#208AEF",
           "image": "./assets/images/splash-icon.png",
