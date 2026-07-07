@@ -4,7 +4,7 @@
     "slug": "LightHouse3",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    
     "scheme": "lighthouse3",
     "userInterfaceStyle": "automatic",
     "ios": {
