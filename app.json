@@ -1,40 +1,43 @@
 {
   "expo": {
-    "name": "ProjectLightHouseReactApp",
-    "slug": "ProjectLightHouseReactApp",
-    "scheme": "projectlighthouse",
+    "name": "LightHouse3",
+    "slug": "LightHouse3",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "newArchEnabled": false,
-    "packagerOpts": {
-      "config": "metro.config.js",
-      "sourceExts": ["js", "jsx", "json", "ts", "tsx", "bin"]
-    },
+    "icon": "./assets/images/icon.png",
+    "scheme": "lighthouse3",
+    "userInterfaceStyle": "automatic",
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.jmb10.ProjectLightHouseReactApp",
-      "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false,
-        "NSCameraUsageDescription": "This app needs camera access to classify images for Project Lighthouse.",
-        "NSMicrophoneUsageDescription": "This app requires microphone access for video processing."
-      }
+      "icon": "./assets/expo.icon"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "package": "com.jmb10.ProjectLightHouseReactApp"
+      "predictiveBackGestureEnabled": false
     },
-    "packagerOpts": {
-  "config": "metro.config.js"
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
     },
-    "extra": {
-      "eas": {
-        "projectId": "8e70bcba-5878-4373-8088-14cf29429b38"
-      }
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#208AEF",
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 76
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
     }
   }
 }
+
