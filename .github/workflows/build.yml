@@ -78,8 +78,8 @@ jobs:
       - name: Build iOS archive (unsigned)
         run: |
           xcodebuild archive \
-            -workspace ios/ProjectLightHouseReactApp.xcworkspace \
-            -scheme ProjectLightHouseReactApp \
+            -workspace ios/LightHouse3.xcworkspace \
+            -scheme LightHouse3 \
             -configuration Debug \
             -destination "generic/platform=iOS" \
             -archivePath build/App.xcarchive \
