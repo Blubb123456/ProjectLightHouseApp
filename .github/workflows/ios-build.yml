@@ -68,7 +68,8 @@ jobs:
         run: |
           WORKSPACE_PATH=$(find ios -name "*.xcworkspace" -maxdepth 2 | head -n 1)
           SCHEME_NAME=$(basename "$WORKSPACE_PATH" .xcworkspace)
-          
+          env:
+          NODE_OPTIONS: "--max_old_space_size=4096"
           xcodebuild archive \
             -workspace "$WORKSPACE_PATH" \
             -scheme "$SCHEME_NAME" \
